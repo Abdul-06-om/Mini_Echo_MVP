@@ -47,8 +47,8 @@ project):
 - Streaming replies (word-by-word typing effect)
 - Voice/audio input or output
 - Deployment to the internet / multiple simultaneous users
-- Automated test suite (verification is manual, per feature, for this
-  learning MVP)
+- A large/exhaustive automated test suite (each build step gets a small
+  smoke test proving that step's behavior, not comprehensive coverage)
 
 ## 3. User Workflow
 
@@ -129,5 +129,6 @@ verified working.
 
 ## Status
 
-Plan agreed. AWS account / Bedrock access not yet set up — this will
-be part of step 2. No code written yet.
+**Task 1 (project setup)** complete: Python environment, FastAPI/Uvicorn
+installed, basic project structure, and `/health` endpoint with automated
+test. AWS account / Bedrock access not yet set up — scheduled for Task 2.
