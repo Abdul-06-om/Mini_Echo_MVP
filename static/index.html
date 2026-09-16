@@ -31,6 +31,18 @@
     color: #555;
     font-size: 0.9rem;
   }
+  #speaking-indicator {
+    font-style: italic;
+    color: #4a90a4;
+  }
+  @keyframes speaking-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+  #persona-header .avatar.speaking {
+    animation: speaking-pulse 0.6s ease-in-out infinite;
+    filter: drop-shadow(0 0 6px rgba(74, 144, 164, 0.6));
+  }
   #disclaimer {
     background: #fff3cd;
     border: 1px solid #ffe69c;
@@ -107,7 +119,7 @@
     </svg>
     <div>
       <div class="persona-name">Dr. Sarah Chen</div>
-      <div class="persona-role">General Practitioner</div>
+      <div class="persona-role">General Practitioner <span id="speaking-indicator" hidden>🔊 speaking…</span></div>
     </div>
   </div>
   <div id="disclaimer">This is an AI roleplay for practice only — not real medical advice. In a real emergency, contact emergency services immediately.</div>
@@ -135,8 +147,24 @@
     const input = document.getElementById('message-input');
     const button = form.querySelector('button');
     const avatarTemplate = document.getElementById('avatar-template');
+    const personaAvatar = document.querySelector('#persona-header .avatar');
+    const speakingIndicator = document.getElementById('speaking-indicator');
     let isSending = false;
     let conversation = [];
+
+    function setSpeaking(isSpeaking) {
+      personaAvatar.classList.toggle('speaking', isSpeaking);
+      speakingIndicator.hidden = !isSpeaking;
+    }
+
+    function speak(text) {
+      if (!('speechSynthesis' in window)) return;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.onstart = () => setSpeaking(true);
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => setSpeaking(false);
+      speechSynthesis.speak(utterance);
+    }
 
     function addMessage(text, sender) {
       const div = document.createElement('div');
@@ -184,6 +212,7 @@
         const data = await response.json();
         conversation.push({ role: 'assistant', content: data.reply });
         addMessage(data.reply, 'ai');
+        speak(data.reply);
       } catch (error) {
         conversation.pop();
         addMessage('Something went wrong. Please try again.', 'error');
