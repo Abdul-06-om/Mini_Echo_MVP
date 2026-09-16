@@ -67,6 +67,7 @@
     const input = document.getElementById('message-input');
     const button = form.querySelector('button');
     let isSending = false;
+    let conversation = [];
 
     function addMessage(text, sender) {
       const div = document.createElement('div');
@@ -93,14 +94,16 @@
       try {
         addMessage(message, 'user');
         input.value = '';
+        conversation.push({ role: 'user', content: message });
 
         const response = await fetch('/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: message }),
+          body: JSON.stringify({ messages: conversation }),
         });
 
         const data = await response.json();
+        conversation.push({ role: 'assistant', content: data.reply });
         addMessage(data.reply, 'ai');
       } finally {
         isSending = false;

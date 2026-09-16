@@ -20,12 +20,12 @@ SYSTEM_PROMPT = (
 _client = boto3.client("bedrock-runtime", region_name=REGION)
 
 
-def build_request_body(message: str) -> dict:
+def build_request_body(messages: list) -> dict:
     return {
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": MAX_TOKENS,
         "system": SYSTEM_PROMPT,
-        "messages": [{"role": "user", "content": message}],
+        "messages": messages,
     }
 
 
@@ -33,8 +33,8 @@ def extract_reply_text(response_body: dict) -> str:
     return response_body["content"][0]["text"]
 
 
-def get_reply(message: str) -> str:
-    body = build_request_body(message)
+def get_reply(messages: list) -> str:
+    body = build_request_body(messages)
 
     response = _client.invoke_model(
         modelId=MODEL_ID,

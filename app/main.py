@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -7,8 +9,13 @@ from app.bedrock import get_reply
 app = FastAPI()
 
 
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
-    message: str
+    messages: list[ChatMessage]
 
 
 class ChatResponse(BaseModel):
@@ -27,5 +34,6 @@ def index():
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
-    reply = get_reply(request.message)
+    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    reply = get_reply(messages)
     return ChatResponse(reply=reply)
