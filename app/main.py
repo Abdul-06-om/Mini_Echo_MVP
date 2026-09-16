@@ -3,6 +3,7 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.bedrock import get_reply
@@ -10,6 +11,7 @@ from app.bedrock import get_reply
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 class ChatMessage(BaseModel):
