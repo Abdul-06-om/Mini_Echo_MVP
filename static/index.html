@@ -13,6 +13,15 @@
   h1 {
     font-size: 1.25rem;
   }
+  #disclaimer {
+    background: #fff3cd;
+    border: 1px solid #ffe69c;
+    color: #664d03;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
   #chat {
     border: 1px solid #ccc;
     border-radius: 8px;
@@ -39,6 +48,10 @@
   .message.ai .bubble {
     background: #f0f0f0;
   }
+  .message.error .bubble {
+    background: #ffe0e0;
+    color: #900;
+  }
   form {
     display: flex;
     gap: 0.5rem;
@@ -54,7 +67,7 @@
 </head>
 <body>
   <h1>Mini ECHO</h1>
-  <p>Roleplay conversation with an AI general practitioner. This is practice only, not real medical advice.</p>
+  <div id="disclaimer">This is an AI roleplay for practice only — not real medical advice. In a real emergency, contact emergency services immediately.</div>
   <div id="chat"></div>
   <form id="chat-form">
     <input id="message-input" type="text" placeholder="Type a message..." autocomplete="off" required>
@@ -102,9 +115,16 @@
           body: JSON.stringify({ messages: conversation }),
         });
 
+        if (!response.ok) {
+          throw new Error('Request failed with status ' + response.status);
+        }
+
         const data = await response.json();
         conversation.push({ role: 'assistant', content: data.reply });
         addMessage(data.reply, 'ai');
+      } catch (error) {
+        conversation.pop();
+        addMessage('Something went wrong. Please try again.', 'error');
       } finally {
         isSending = false;
         input.disabled = false;

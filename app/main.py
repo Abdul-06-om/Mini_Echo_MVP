@@ -1,10 +1,13 @@
+import logging
 from typing import Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.bedrock import get_reply
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -35,5 +38,14 @@ def index():
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
-    reply = get_reply(messages)
+
+    try:
+        reply = get_reply(messages)
+    except Exception:
+        logger.exception("Bedrock call failed")
+        raise HTTPException(
+            status_code=503,
+            detail="The AI service is temporarily unavailable. Please try again.",
+        )
+
     return ChatResponse(reply=reply)

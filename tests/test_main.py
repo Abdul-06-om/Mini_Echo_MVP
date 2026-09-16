@@ -46,3 +46,16 @@ def test_chat_endpoint_passes_full_history_to_get_reply(mock_get_reply):
     assert response.status_code == 200
     assert response.json() == {"reply": "Second reply"}
     mock_get_reply.assert_called_once_with(history)
+
+
+@patch("app.main.get_reply")
+def test_chat_endpoint_returns_503_when_bedrock_fails(mock_get_reply):
+    mock_get_reply.side_effect = Exception("boom: sensitive AWS detail")
+
+    response = client.post("/chat", json={"messages": [{"role": "user", "content": "Hello"}]})
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "The AI service is temporarily unavailable. Please try again."
+    }
+    assert "sensitive AWS detail" not in response.text
