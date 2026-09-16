@@ -15,23 +15,27 @@
   }
   #persona-header {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
+    text-align: center;
+    gap: 0.35rem;
+    margin-bottom: 1.5rem;
   }
   .avatar {
     border-radius: 50%;
     object-fit: cover;
     object-position: 35% 20%;
-    border: 2px solid #4a90a4;
+    border: 3px solid #4a90a4;
   }
   #persona-header .avatar {
-    width: 56px;
-    height: 56px;
-    flex-shrink: 0;
+    width: 240px;
+    height: 240px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
   }
   .persona-name {
     font-weight: 600;
+    font-size: 1.1rem;
+    margin-top: 0.5rem;
   }
   .persona-role {
     color: #555;
@@ -121,11 +125,9 @@
   <h1>Mini ECHO</h1>
   <div id="persona-header">
     <img class="avatar" src="/static/avatar.jpg" alt="Dr. Sarah Chen">
-    <div>
-      <div class="persona-name">Dr. Sarah Chen</div>
-      <div class="persona-role">General Practitioner <span id="speaking-indicator" hidden>🔊 speaking…</span></div>
-      <label class="voice-label">Voice: <select id="voice-select"></select></label>
-    </div>
+    <div class="persona-name">Dr. Sarah Chen</div>
+    <div class="persona-role">General Practitioner <span id="speaking-indicator" hidden>🔊 speaking…</span></div>
+    <label class="voice-label">Voice: <select id="voice-select"></select></label>
   </div>
   <div id="disclaimer">This is an AI roleplay for practice only — not real medical advice. In a real emergency, contact emergency services immediately.</div>
   <div id="chat"></div>
