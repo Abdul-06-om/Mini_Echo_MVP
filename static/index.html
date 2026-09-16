@@ -13,6 +13,24 @@
   h1 {
     font-size: 1.25rem;
   }
+  #persona-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  #persona-header .avatar {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+  }
+  .persona-name {
+    font-weight: 600;
+  }
+  .persona-role {
+    color: #555;
+    font-size: 0.9rem;
+  }
   #disclaimer {
     background: #fff3cd;
     border: 1px solid #ffe69c;
@@ -35,6 +53,16 @@
   }
   .message.user {
     text-align: right;
+  }
+  .message.ai {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  .message.ai .avatar {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
   }
   .message .bubble {
     display: inline-block;
@@ -67,6 +95,21 @@
 </head>
 <body>
   <h1>Mini ECHO</h1>
+  <div id="persona-header">
+    <svg class="avatar" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Doctor avatar">
+      <circle cx="50" cy="50" r="50" fill="#4a90a4"/>
+      <path d="M22 88 C22 65 34 55 50 55 C66 55 78 65 78 88 Z" fill="#ffffff"/>
+      <circle cx="50" cy="38" r="17" fill="#f2c29b"/>
+      <path d="M33 32 C33 20 67 20 67 32 C67 26 33 26 33 32 Z" fill="#4a3423"/>
+      <path d="M40 58 C40 68 60 68 60 58" fill="none" stroke="#9fb4bd" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="40" cy="60" r="3" fill="#9fb4bd"/>
+      <circle cx="60" cy="60" r="3" fill="#9fb4bd"/>
+    </svg>
+    <div>
+      <div class="persona-name">Dr. Sarah Chen</div>
+      <div class="persona-role">General Practitioner</div>
+    </div>
+  </div>
   <div id="disclaimer">This is an AI roleplay for practice only — not real medical advice. In a real emergency, contact emergency services immediately.</div>
   <div id="chat"></div>
   <form id="chat-form">
@@ -74,21 +117,40 @@
     <button type="submit">Send</button>
   </form>
 
+  <template id="avatar-template">
+    <svg class="avatar" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Doctor avatar">
+      <circle cx="50" cy="50" r="50" fill="#4a90a4"/>
+      <path d="M22 88 C22 65 34 55 50 55 C66 55 78 65 78 88 Z" fill="#ffffff"/>
+      <circle cx="50" cy="38" r="17" fill="#f2c29b"/>
+      <path d="M33 32 C33 20 67 20 67 32 C67 26 33 26 33 32 Z" fill="#4a3423"/>
+      <path d="M40 58 C40 68 60 68 60 58" fill="none" stroke="#9fb4bd" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="40" cy="60" r="3" fill="#9fb4bd"/>
+      <circle cx="60" cy="60" r="3" fill="#9fb4bd"/>
+    </svg>
+  </template>
+
   <script>
     const chat = document.getElementById('chat');
     const form = document.getElementById('chat-form');
     const input = document.getElementById('message-input');
     const button = form.querySelector('button');
+    const avatarTemplate = document.getElementById('avatar-template');
     let isSending = false;
     let conversation = [];
 
     function addMessage(text, sender) {
       const div = document.createElement('div');
       div.className = 'message ' + sender;
+
+      if (sender === 'ai') {
+        div.appendChild(avatarTemplate.content.cloneNode(true));
+      }
+
       const bubble = document.createElement('span');
       bubble.className = 'bubble';
       bubble.textContent = text;
       div.appendChild(bubble);
+
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
