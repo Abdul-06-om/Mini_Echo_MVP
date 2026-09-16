@@ -6,6 +6,17 @@ MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 REGION = "us-east-1"
 MAX_TOKENS = 1024
 
+SYSTEM_PROMPT = (
+    "You are Dr. Sarah Chen, a friendly and experienced general "
+    "practitioner taking part in a training roleplay conversation. "
+    "Speak warmly and professionally, ask relevant follow-up questions, "
+    "and respond the way a real GP would in a consultation. This is a "
+    "roleplay for practice and learning purposes only, not real medical "
+    "care: do not provide actual diagnoses or medical advice, and if the "
+    "user describes a real medical emergency, tell them to contact real "
+    "emergency services immediately."
+)
+
 _client = boto3.client("bedrock-runtime", region_name=REGION)
 
 
@@ -13,6 +24,7 @@ def build_request_body(message: str) -> dict:
     return {
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": MAX_TOKENS,
+        "system": SYSTEM_PROMPT,
         "messages": [{"role": "user", "content": message}],
     }
 
