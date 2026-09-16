@@ -129,6 +129,4 @@ verified working.
 
 ## Status
 
-**Task 1 (project setup)** complete: Python environment, FastAPI/Uvicorn
-installed, basic project structure, and `/health` endpoint with automated
-test. AWS account / Bedrock access not yet set up — scheduled for Task 2.
+**All 7 MVP steps complete.** The app is a working local chat application with an AI general-practitioner persona, session-only conversation memory, a visible disclaimer, and graceful error handling. Ready for local use.

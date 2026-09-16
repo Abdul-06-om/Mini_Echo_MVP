@@ -105,9 +105,9 @@
       button.disabled = true;
 
       try {
+        conversation.push({ role: 'user', content: message });
         addMessage(message, 'user');
         input.value = '';
-        conversation.push({ role: 'user', content: message });
 
         const response = await fetch('/chat', {
           method: 'POST',
