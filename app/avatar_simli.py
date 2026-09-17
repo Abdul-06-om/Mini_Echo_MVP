@@ -10,11 +10,11 @@ class SimliAvatarProvider:
     def __init__(self):
         self.api_key = os.environ["SIMLI_API_KEY"]
 
-    def create_session(self) -> dict:
+    def create_session(self, face_id: str | None = None) -> dict:
         response = httpx.post(
             TOKEN_URL,
             json={
-                "faceId": FACE_ID,
+                "faceId": face_id or FACE_ID,
                 "handleSilence": True,
                 "maxSessionLength": 600,
                 "maxIdleTime": 180,

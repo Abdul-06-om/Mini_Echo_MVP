@@ -70,6 +70,17 @@ def test_avatar_session_returns_provider_result(mock_create_session):
 
     assert response.status_code == 200
     assert response.json() == {"session_token": "mocked-token"}
+    mock_create_session.assert_called_once_with(None)
+
+
+@patch("app.main.avatar_provider.create_session")
+def test_avatar_session_passes_face_id_when_provided(mock_create_session):
+    mock_create_session.return_value = {"session_token": "mocked-token"}
+
+    response = client.post("/avatar/session", json={"face_id": "custom-face-id"})
+
+    assert response.status_code == 200
+    mock_create_session.assert_called_once_with("custom-face-id")
 
 
 @patch("app.main.avatar_provider.create_session")

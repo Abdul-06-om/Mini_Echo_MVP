@@ -45,6 +45,10 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class AvatarSessionRequest(BaseModel):
+    face_id: str | None = None
+
+
 class TTSRequest(BaseModel):
     text: str
     voice_id: str | None = None
@@ -103,9 +107,10 @@ def personas():
 
 
 @app.post("/avatar/session")
-def avatar_session():
+def avatar_session(request: AvatarSessionRequest | None = None):
+    face_id = request.face_id if request else None
     try:
-        return avatar_provider.create_session()
+        return avatar_provider.create_session(face_id)
     except Exception:
         logger.exception("Avatar session creation failed")
         raise HTTPException(
