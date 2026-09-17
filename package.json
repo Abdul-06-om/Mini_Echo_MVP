@@ -1,0 +1,21 @@
+{
+  "name": "mini_echo_mvp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "build": "esbuild avatar-src/doctor-avatar.js --bundle --outfile=static/dist/avatar-bundle.js --format=iife --global-name=MiniEchoAvatar --platform=browser"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "simli-client": "^3.0.2"
+  }
+}

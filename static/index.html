@@ -6,58 +6,83 @@
 <style>
   body {
     font-family: system-ui, sans-serif;
-    max-width: 640px;
+    max-width: 960px;
     margin: 2rem auto;
     padding: 0 1rem;
   }
   h1 {
     font-size: 1.25rem;
   }
-  #persona-header {
+  #app-layout {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 0.35rem;
-    margin-bottom: 1.5rem;
+    gap: 1.5rem;
+    align-items: flex-start;
   }
-  .avatar {
-    border-radius: 50%;
-    object-fit: cover;
-    object-position: 35% 20%;
+  #avatar-panel {
+    width: 300px;
+    flex-shrink: 0;
+    text-align: center;
+  }
+  #avatar-video-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #222;
     border: 3px solid #4a90a4;
   }
-  #persona-header .avatar {
-    width: 240px;
-    height: 240px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  #avatar-video-wrap img,
+  #avatar-video-wrap video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  #avatar-video-wrap img {
+    object-position: 35% 20%;
+  }
+  #avatar-video-wrap video {
+    object-position: center;
+  }
+  #avatar-state-badge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    text-transform: capitalize;
+  }
+  #avatar-panel[data-state="speaking"] #avatar-video-wrap {
+    box-shadow: 0 0 0 4px rgba(74, 144, 164, 0.5);
+  }
+  #avatar-panel[data-state="thinking"] #avatar-state-badge {
+    background: rgba(180, 140, 0, 0.85);
+  }
+  #avatar-panel[data-state="error"] #avatar-state-badge {
+    background: rgba(180, 0, 0, 0.85);
   }
   .persona-name {
     font-weight: 600;
-    font-size: 1.1rem;
-    margin-top: 0.5rem;
+    font-size: 1.05rem;
+    margin-top: 0.6rem;
   }
   .persona-role {
     color: #555;
     font-size: 0.9rem;
   }
-  #speaking-indicator {
-    font-style: italic;
-    color: #4a90a4;
-  }
   .voice-label {
     display: block;
     font-size: 0.8rem;
     color: #555;
-    margin-top: 0.25rem;
+    margin-top: 0.5rem;
   }
-  @keyframes speaking-pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.08); }
-  }
-  #persona-header .avatar.speaking {
-    animation: speaking-pulse 0.6s ease-in-out infinite;
-    filter: drop-shadow(0 0 6px rgba(74, 144, 164, 0.6));
+  #chat-panel {
+    flex: 1;
+    min-width: 0;
   }
   #disclaimer {
     background: #fff3cd;
@@ -91,6 +116,10 @@
     width: 28px;
     height: 28px;
     flex-shrink: 0;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: 35% 20%;
+    border: 2px solid #4a90a4;
   }
   .message .bubble {
     display: inline-block;
@@ -119,83 +148,108 @@
   button {
     padding: 0.5rem 1rem;
   }
+  @media (max-width: 700px) {
+    #app-layout {
+      flex-direction: column;
+    }
+    #avatar-panel {
+      width: 100%;
+    }
+    #avatar-video-wrap {
+      max-width: 280px;
+      margin: 0 auto;
+    }
+  }
 </style>
 </head>
 <body>
   <h1>Mini ECHO</h1>
-  <div id="persona-header">
-    <img class="avatar" src="/static/avatar.jpg" alt="Dr. Sarah Chen">
-    <div class="persona-name">Dr. Sarah Chen</div>
-    <div class="persona-role">General Practitioner <span id="speaking-indicator" hidden>🔊 speaking…</span></div>
-    <label class="voice-label">Voice: <select id="voice-select"></select></label>
+  <div id="app-layout">
+    <div id="avatar-panel" data-state="idle">
+      <div id="avatar-video-wrap">
+        <img id="avatar-poster" src="/static/avatar.jpg" alt="Dr. Sarah Chen">
+        <video id="avatar-video" autoplay playsinline hidden></video>
+        <audio id="avatar-audio" autoplay></audio>
+        <span id="avatar-state-badge">idle</span>
+      </div>
+      <div class="persona-name">Dr. Sarah Chen</div>
+      <div class="persona-role">General Practitioner</div>
+      <label class="voice-label">Voice: <select id="voice-select"></select></label>
+    </div>
+    <div id="chat-panel">
+      <div id="disclaimer">This is an AI roleplay for practice only — not real medical advice. In a real emergency, contact emergency services immediately.</div>
+      <div id="chat"></div>
+      <form id="chat-form">
+        <input id="message-input" type="text" placeholder="Type a message..." autocomplete="off" required>
+        <button type="submit">Send</button>
+      </form>
+    </div>
   </div>
-  <div id="disclaimer">This is an AI roleplay for practice only — not real medical advice. In a real emergency, contact emergency services immediately.</div>
-  <div id="chat"></div>
-  <form id="chat-form">
-    <input id="message-input" type="text" placeholder="Type a message..." autocomplete="off" required>
-    <button type="submit">Send</button>
-  </form>
 
   <template id="avatar-template">
     <img class="avatar" src="/static/avatar.jpg" alt="Dr. Sarah Chen">
   </template>
 
+  <script src="/static/dist/avatar-bundle.js"></script>
   <script>
     const chat = document.getElementById('chat');
     const form = document.getElementById('chat-form');
     const input = document.getElementById('message-input');
     const button = form.querySelector('button');
     const avatarTemplate = document.getElementById('avatar-template');
-    const personaAvatar = document.querySelector('#persona-header .avatar');
-    const speakingIndicator = document.getElementById('speaking-indicator');
     const voiceSelect = document.getElementById('voice-select');
+    const avatarVideo = document.getElementById('avatar-video');
+    const avatarAudio = document.getElementById('avatar-audio');
+    const avatarPoster = document.getElementById('avatar-poster');
+    const avatarPanel = document.getElementById('avatar-panel');
+    const avatarStateBadge = document.getElementById('avatar-state-badge');
     let isSending = false;
     let conversation = [];
     let voices = [];
 
-    function populateVoices() {
-      voices = speechSynthesis.getVoices();
+    const avatar = new MiniEchoAvatar.DoctorAvatar({
+      videoEl: avatarVideo,
+      audioEl: avatarAudio,
+      panelEl: avatarPanel,
+      stateEl: avatarStateBadge,
+    });
+
+    avatarVideo.addEventListener('playing', () => {
+      avatarVideo.hidden = false;
+      avatarPoster.hidden = true;
+    });
+
+    avatar.connect();
+
+    async function populateVoices() {
+      try {
+        const response = await fetch('/voices');
+        if (!response.ok) throw new Error('Failed to load voices');
+        voices = await response.json();
+      } catch (error) {
+        console.error('Failed to load voices', error);
+        voices = [];
+      }
+
       voiceSelect.replaceChildren();
-      voices.forEach((voice, index) => {
+      voices.forEach((voice) => {
         const option = document.createElement('option');
-        option.value = index;
-        option.textContent = voice.name + ' (' + voice.lang + ')';
+        option.value = voice.voice_id;
+        option.textContent = voice.name;
         voiceSelect.appendChild(option);
       });
 
-      const savedIndex = localStorage.getItem('voiceIndex');
-      if (savedIndex !== null && voices[savedIndex]) {
-        voiceSelect.value = savedIndex;
+      const savedVoiceId = localStorage.getItem('voiceId');
+      if (savedVoiceId && voices.some((v) => v.voice_id === savedVoiceId)) {
+        voiceSelect.value = savedVoiceId;
       }
     }
 
-    if ('speechSynthesis' in window) {
-      populateVoices();
-      speechSynthesis.onvoiceschanged = populateVoices;
-      voiceSelect.addEventListener('change', () => {
-        localStorage.setItem('voiceIndex', voiceSelect.value);
-      });
-    } else {
-      voiceSelect.disabled = true;
-    }
+    voiceSelect.addEventListener('change', () => {
+      localStorage.setItem('voiceId', voiceSelect.value);
+    });
 
-    function setSpeaking(isSpeaking) {
-      personaAvatar.classList.toggle('speaking', isSpeaking);
-      speakingIndicator.hidden = !isSpeaking;
-    }
-
-    function speak(text) {
-      if (!('speechSynthesis' in window)) return;
-      const utterance = new SpeechSynthesisUtterance(text);
-      const selectedVoice = voices[voiceSelect.value];
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-      }
-      utterance.onstart = () => setSpeaking(true);
-      utterance.onend = () => setSpeaking(false);
-      utterance.onerror = () => setSpeaking(false);
-      speechSynthesis.speak(utterance);
-    }
+    populateVoices();
 
     function addMessage(text, sender) {
       const div = document.createElement('div');
@@ -229,6 +283,7 @@
         conversation.push({ role: 'user', content: message });
         addMessage(message, 'user');
         input.value = '';
+        avatar.think();
 
         const response = await fetch('/chat', {
           method: 'POST',
@@ -243,7 +298,7 @@
         const data = await response.json();
         conversation.push({ role: 'assistant', content: data.reply });
         addMessage(data.reply, 'ai');
-        speak(data.reply);
+        avatar.speak(data.reply, voiceSelect.value);
       } catch (error) {
         conversation.pop();
         addMessage('Something went wrong. Please try again.', 'error');
