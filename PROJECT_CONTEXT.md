@@ -20,7 +20,9 @@ live in the page — not a static image, not a canned animation.
 app/
   main.py            FastAPI app: all routes, dotenv loading, error handling
   bedrock.py          AWS Bedrock call + persona system prompt
-  personas.py         Persona registry (HCP identity + safety framing)
+  personas/           Persona Library: models.py (Persona dataclass) +
+                       registry.py (get_persona()/list_personas(), the
+                       only functions any caller uses — never a raw dict)
   tts.py               ElevenLabs text-to-speech + voice list
   avatar_provider.py  Abstract interface any avatar vendor must implement
   avatar_simli.py     Simli-specific implementation of that interface
@@ -120,6 +122,13 @@ including the avatar photo and the built JS bundle.
 JSON response (`{"session_token": "..."}`) unchanged. `FACE_ID` is Simli's own
 preset **"Doctor"** face (`f0ba4efe-7946-45de-9955-c04a04c367b9`) — not a custom
 avatar, no image/likeness was uploaded.
+
+`create_session(face_id: str | None = None)` accepts an optional
+per-request face override, defaulting to `FACE_ID` when omitted.
+`POST /avatar/session` exposes this as an optional `face_id` field on its
+request body. No caller sends a non-default value yet — the frontend's
+`avatar.connect()` still fires once at page load, before any persona is
+selected, exactly as before this field existed.
 
 **Frontend** (`avatar-src/doctor-avatar.js`, exported as `DoctorAvatar`, exposed on
 `window.MiniEchoAvatar.DoctorAvatar` via the esbuild IIFE bundle):
@@ -222,12 +231,18 @@ scenario, conversation objective, persona mood/behavior, and difficulty
 context for the *same* Bedrock conversation Text Chat and Live Voice
 already share — no new conversation pipeline, no backend persistence.
 
-**Persona registry** (`app/personas.py`, `PERSONAS: dict[str, Persona]`):
-a `Persona` is `{id, name, role_title, base_description, safety_framing}`.
-Dr. Sarah Chen is the only entry today, structurally no different from any
-future persona — adding one is one dict entry. `safety_framing` lives on
-the persona (not globally) so a future non-medical HCP persona can carry
-different disclaimer language.
+**Persona registry** (`app/personas/`, a Persona Library — `models.py`'s
+`Persona` dataclass + `registry.py`'s `get_persona(id)`/`list_personas()`):
+a `Persona` is `{id, name, role_title, category, base_description,
+safety_framing, voice_id, face_id}`. Every caller (`app/main.py`) goes
+through `get_persona`/`list_personas` — never a raw dict — so moving the
+registry to a database later only means rewriting the inside of
+`registry.py`; no caller changes. `voice_id` is used to default the
+Roleplay setup form's voice selector (still user-overridable); `face_id`
+is modeled and accepted by `POST /avatar/session` at the API level, but
+every persona currently points at the same verified Simli face — see
+"Known issues / open items" for why. Dr. Sarah Chen is still the only
+entry today, structurally no different from any future persona.
 
 **Dynamic system prompt** (`app/bedrock.py`): `build_system_prompt(persona,
 session)` composes persona + scenario + objective + mood + a
@@ -428,6 +443,14 @@ viewport (`100dvh`) dark cinematic layout:
   (the app version has a persona system prompt and conversation-list support, the
   script is still the frozen single-message Step 2 version) — this is intentional
   per earlier design review, not drift to "fix."
+- Persona-specific Simli faces are modeled (`Persona.face_id`,
+  `POST /avatar/session`'s optional `face_id`) but not yet wired end to
+  end: every persona currently shares one verified Simli face, and
+  `avatar.connect()` still fires once at page load before any persona is
+  chosen. Switching faces per persona requires either delaying that call
+  or adding reconnect-on-persona-change logic to `doctor-avatar.js` —
+  neither exists yet, deliberately deferred until multiple real Simli
+  face IDs are provisioned.
 - Live Voice Conversation mode (the mic button and listening state) requires
   desktop Chrome — the browser's native `SpeechRecognition` API is not available
   in Safari or Firefox. On those browsers, the mic button is disabled with an
@@ -440,7 +463,7 @@ source venv/bin/activate
 pytest -v
 ```
 
-24 tests, all passing, all network-free (every external call — Bedrock, Simli,
+27 tests, all passing, all network-free (every external call — Bedrock, Simli,
 ElevenLabs — is mocked at the function boundary in `tests/test_main.py`, or
 avoided entirely via pure-function tests in `tests/test_bedrock.py`). No tests
 exist for the JavaScript (`doctor-avatar.js`, the inline script, or CSS) — this is
@@ -532,8 +555,14 @@ installed; both `esbuild` and `simli-client` are declared in `package.json`.)
 
 ## Next planned feature
 
-None currently planned. Roleplay Sessions (structured persona/scenario/
-objective/mood/difficulty config as dynamic Bedrock context, shared by
-Text Chat and Live Voice) was the previously-planned next feature — see
-"Roleplay Sessions" above — and is now built and manually verified
-end-to-end by the user. Nothing is queued up after it.
+None currently planned. Persona Library (a function-based persona
+registry with `category`/`voice_id`/`face_id`, persona-default voice
+selection in the Roleplay setup form, and `face_id` modeled through
+`POST /avatar/session`) was the previously-planned next feature — see
+"Roleplay Sessions" above for the registry and
+`docs/superpowers/specs/2026-09-17-persona-library-design.md` for the
+full design rationale — and is now built and verified (pytest for the
+backend; the voice-default behavior via manual browser QA). Nothing is
+queued up after it. A follow-up milestone is expected once multiple real
+Simli face IDs are provisioned, to wire per-persona face switching and
+safe Simli reconnection.
