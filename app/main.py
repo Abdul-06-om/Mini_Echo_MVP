@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.avatar_simli import SimliAvatarProvider
 from app.bedrock import get_reply
+from app.personas import PERSONAS
 from app.tts import list_voices, synthesize_speech
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,17 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class RoleplaySessionRequest(BaseModel):
+    persona_id: str
+    scenario: str
+    objective: str
+    mood: str
+    difficulty: Literal["easy", "medium", "hard"]
+
+
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
+    session: RoleplaySessionRequest | None = None
 
 
 class ChatResponse(BaseModel):
@@ -54,8 +64,19 @@ def index():
 def chat(request: ChatRequest):
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
 
+    persona = None
+    session_dict = None
+    if request.session is not None:
+        persona = PERSONAS.get(request.session.persona_id)
+        if persona is None:
+            raise HTTPException(status_code=400, detail="Unknown persona_id.")
+        session_dict = request.session.model_dump()
+
     try:
-        reply = get_reply(messages)
+        if persona is not None:
+            reply = get_reply(messages, persona=persona, session=session_dict)
+        else:
+            reply = get_reply(messages)
     except Exception:
         logger.exception("Bedrock call failed")
         raise HTTPException(
@@ -64,6 +85,14 @@ def chat(request: ChatRequest):
         )
 
     return ChatResponse(reply=reply)
+
+
+@app.get("/personas")
+def personas():
+    return [
+        {"id": p.id, "name": p.name, "role_title": p.role_title}
+        for p in PERSONAS.values()
+    ]
 
 
 @app.post("/avatar/session")

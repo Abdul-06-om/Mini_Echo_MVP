@@ -3,6 +3,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.personas import PERSONAS
 
 client = TestClient(app)
 
@@ -120,3 +121,58 @@ def test_tts_returns_503_on_failure(mock_synthesize_speech):
 
     assert response.status_code == 503
     assert "sensitive ElevenLabs detail" not in response.text
+
+
+@patch("app.main.get_reply")
+def test_chat_endpoint_with_roleplay_session_passes_persona_and_session(mock_get_reply):
+    mock_get_reply.return_value = "In character reply"
+    session_payload = {
+        "persona_id": "dr_sarah_chen",
+        "scenario": "Pharmaceutical sales call",
+        "objective": "Introduce a new treatment and handle objections",
+        "mood": "Skeptical, short on time",
+        "difficulty": "medium",
+    }
+
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [{"role": "user", "content": "Hello doctor"}],
+            "session": session_payload,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"reply": "In character reply"}
+    mock_get_reply.assert_called_once_with(
+        [{"role": "user", "content": "Hello doctor"}],
+        persona=PERSONAS["dr_sarah_chen"],
+        session=session_payload,
+    )
+
+
+def test_chat_endpoint_rejects_unknown_persona_id():
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [{"role": "user", "content": "Hi"}],
+            "session": {
+                "persona_id": "nonexistent_persona",
+                "scenario": "x",
+                "objective": "y",
+                "mood": "z",
+                "difficulty": "medium",
+            },
+        },
+    )
+
+    assert response.status_code == 400
+
+
+def test_personas_returns_registered_personas():
+    response = client.get("/personas")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"id": "dr_sarah_chen", "name": "Dr. Sarah Chen", "role_title": "General Practitioner"}
+    ]
