@@ -61,21 +61,28 @@ npm/ESM and cannot be loaded via a plain `<script>` tag or CDN import.
 Routes:
 - `GET /health` — liveness check
 - `GET /` — serves `static/index.html`
-- `POST /chat` — body `{"messages": [{"role": "user"|"assistant", "content": str}]}`
-  (full conversation each call — backend is stateless), returns `{"reply": str}`.
-  Calls `app.bedrock.get_reply`.
+- `POST /chat` — body `{"messages": [...], "session": {...} | None}` (full
+  conversation each call — backend is stateless), returns `{"reply": str}`.
+  `session` is optional — see "Roleplay Sessions" below. Calls
+  `app.bedrock.get_reply`.
 - `POST /avatar/session` — calls `avatar_provider.create_session()` (currently
   `SimliAvatarProvider`), returns Simli's session token JSON as-is. This is what
   lets the browser start a Simli WebRTC session without ever seeing the API key.
 - `GET /voices` — calls `app.tts.list_voices()`, returns `[{"voice_id", "name"}, ...]`
 - `POST /tts` — body `{"text": str, "voice_id": str | None}`, returns raw
   `audio/pcm` bytes (16-bit PCM, 16kHz, mono) from ElevenLabs.
+- `GET /personas` — returns `[{"id", "name", "role_title"}, ...]` from the
+  `app.personas.PERSONAS` registry. Unlike the routes above, this has no
+  try/except — there's no real failure mode for a static in-process dict.
 
-Every route wraps its provider call in `try/except Exception`, logs the real
-exception server-side via `logger.exception(...)`, and returns a generic 503 with a
-fixed message — no upstream (AWS/Simli/ElevenLabs) exception text ever reaches the
-client. This is deliberate and tested (`tests/test_main.py` asserts the raw
-exception message is absent from the response body for each route).
+Every route that calls a genuine upstream provider wraps that call in
+`try/except Exception`, logs the real exception server-side via
+`logger.exception(...)`, and returns a generic 503 with a fixed message — no
+upstream (AWS/Simli/ElevenLabs) exception text ever reaches the client. This
+is deliberate and tested (`tests/test_main.py` asserts the raw exception
+message is absent from the response body for each such route). `/chat` also
+returns a 400 (not 503) if `session.persona_id` doesn't match a registered
+persona — a client error, not an upstream failure.
 
 `app.mount("/static", StaticFiles(directory="static"), ...)` serves `static/` as-is,
 including the avatar photo and the built JS bundle.
@@ -84,13 +91,18 @@ including the avatar photo and the built JS bundle.
 
 - Model: `us.anthropic.claude-haiku-4-5-20251001-v1:0` (an inference-profile ID —
   the plain model ID does not work for this model; region `us-east-1`).
-- `SYSTEM_PROMPT` defines the "Dr. Sarah Chen" persona (warm GP, roleplay framing,
-  told not to give real diagnoses, told to redirect real emergencies to real
-  emergency services).
-- `build_request_body(messages) -> dict` / `extract_reply_text(response_body) -> dict`
-  are pure functions, unit tested without any network call.
-- `get_reply(messages) -> str` makes the real `bedrock-runtime.invoke_model` call.
-  `_client` (the boto3 client) is constructed once at module import time.
+- `DEFAULT_SYSTEM_PROMPT` (renamed from `SYSTEM_PROMPT`, value unchanged) is the
+  "Dr. Sarah Chen" persona prompt (warm GP, roleplay framing, told not to give
+  real diagnoses, told to redirect real emergencies to real emergency
+  services) — used whenever no roleplay session is active. When one is,
+  `build_system_prompt(persona, session)` composes a dynamic prompt instead —
+  see "Roleplay Sessions" below.
+- `build_request_body(messages, persona=None, session=None) -> dict` /
+  `extract_reply_text(response_body) -> dict` are pure functions, unit tested
+  without any network call.
+- `get_reply(messages, persona=None, session=None) -> str` makes the real
+  `bedrock-runtime.invoke_model` call. `_client` (the boto3 client) is
+  constructed once at module import time.
 - Credentials come from the standard AWS CLI credential chain (`~/.aws/credentials`,
   set up via `aws configure` for an IAM user named `mini-echo-dev`) — never from
   `.env`, never touched by application code directly.
@@ -343,9 +355,12 @@ viewport (`100dvh`) dark cinematic layout:
     text is CSS `content` mapped from `data-state` — not the raw
     `stateEl.textContent` the JS sets, which is hidden via `font-size: 0` — plus
     the voice `<select>`, restyled but still a native element)
-  - `#chat-panel` — disclaimer banner, `#chat` (glass scrollable log,
-    `.message.user|.ai|.error` + `.bubble` classes exactly as set by
-    `addMessage()`), `#chat-form` (pill-shaped composer with an SVG send icon)
+  - `#chat-panel` — disclaimer banner, `#roleplay-setup` (the "Start a
+    Roleplay" form — see "Roleplay Sessions" below; visible by default),
+    `#chat` (glass scrollable log, `.message.user|.ai|.error` + `.bubble`
+    classes exactly as set by `addMessage()`), `#chat-form` (pill-shaped
+    composer with an SVG send icon) — `#chat` and `#chat-form` both start
+    hidden via inline `style="display: none;"` until a roleplay is started
 - Fonts: Space Grotesk (headings/labels) + Inter (body/chat), loaded from Google
   Fonts — the only external dependency added for the redesign.
 - Palette: near-black navy base, one restrained teal accent (`#5ed4c4`), glass
@@ -407,7 +422,7 @@ source venv/bin/activate
 pytest -v
 ```
 
-15 tests, all passing, all network-free (every external call — Bedrock, Simli,
+24 tests, all passing, all network-free (every external call — Bedrock, Simli,
 ElevenLabs — is mocked at the function boundary in `tests/test_main.py`, or
 avoided entirely via pure-function tests in `tests/test_bedrock.py`). No tests
 exist for the JavaScript (`doctor-avatar.js`, the inline script, or CSS) — this is
@@ -481,6 +496,11 @@ installed; both `esbuild` and `simli-client` are declared in `package.json`.)
 - The `position: absolute` overlay + inline-style-toggle fix for the video/poster
   (regressing to `hidden`-attribute-only toggling or removing the absolute
   positioning reintroduces the "invisible video" bug)
+- `#chat` and `form#chat-form`'s inline `style="display: ..."` toggling (not
+  the `hidden` attribute) — both have an explicit CSS `display: flex` rule at
+  id-level specificity that would silently override `hidden`. Originally the
+  video/poster bug's fix pattern; now also load-bearing for the roleplay
+  setup flow gating the chat UI (see "Roleplay Sessions").
 - The audio-unlock gesture listener (removing it reintroduces the Chrome autoplay
   bug)
 - `"livekit"` as the Simli transport mode (switching to `"p2p"` requires adding
@@ -494,7 +514,8 @@ installed; both `esbuild` and `simli-client` are declared in `package.json`.)
 
 ## Next planned feature
 
-None currently planned. Live Voice Conversation (mic → STT → existing
-Bedrock/ElevenLabs/Simli pipeline → auto-listen) was the previously-planned
-next feature — see "Live Voice Conversation integration" above — and is now
-built and manually verified end-to-end. Nothing is queued up after it.
+None currently planned. Roleplay Sessions (structured persona/scenario/
+objective/mood/difficulty config as dynamic Bedrock context) was the
+previously-planned next feature — see "Roleplay Sessions" above — and is now
+built, pending the user's manual browser confirmation. Nothing is queued up
+after it.

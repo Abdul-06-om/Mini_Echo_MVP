@@ -695,6 +695,7 @@
     const newRoleplayBtn = document.getElementById('new-roleplay-btn');
     const activePersonaName = document.getElementById('active-persona-name');
     const activePersonaRole = document.getElementById('active-persona-role');
+    const startRoleplayBtn = document.getElementById('start-roleplay-btn');
     let isSending = false;
     let conversation = [];
     let voices = [];
@@ -792,6 +793,16 @@
       }
 
       personaSelect.replaceChildren();
+
+      if (personas.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Could not load personas — please refresh the page';
+        personaSelect.appendChild(option);
+        startRoleplayBtn.disabled = true;
+        return;
+      }
+
       personas.forEach((persona) => {
         const option = document.createElement('option');
         option.value = persona.id;
@@ -808,11 +819,16 @@
       const selectedPersona = personas.find((p) => p.id === personaSelect.value);
       if (!selectedPersona) return;
 
+      const scenario = scenarioInput.value.trim();
+      const objective = objectiveInput.value.trim();
+      const mood = moodInput.value.trim();
+      if (!scenario || !objective || !mood) return;
+
       roleplaySession = {
         persona_id: selectedPersona.id,
-        scenario: scenarioInput.value.trim(),
-        objective: objectiveInput.value.trim(),
-        mood: moodInput.value.trim(),
+        scenario,
+        objective,
+        mood,
         difficulty: difficultySelect.value,
       };
 
@@ -826,9 +842,14 @@
     });
 
     newRoleplayBtn.addEventListener('click', () => {
+      if (isSending) return;
+      if (stt) stopVoiceMode();
+
       roleplaySession = null;
       conversation = [];
       chat.replaceChildren();
+      activePersonaName.textContent = '';
+      activePersonaRole.textContent = '';
 
       roleplaySetupForm.style.display = 'flex';
       chat.style.display = 'none';
@@ -964,19 +985,24 @@
         }, 300);
       }
 
-      voiceToggleBtn.addEventListener('click', () => {
-        voiceModeActive = !voiceModeActive;
-        voiceToggleBtn.dataset.active = String(voiceModeActive);
+      function stopVoiceMode() {
+        voiceModeActive = false;
+        voiceToggleBtn.dataset.active = 'false';
+        stt.stop();
+        noSpeechRestartPending = false;
+        if (avatarPanel.dataset.state === 'listening' || avatarPanel.dataset.state === 'error') {
+          avatarPanel.dataset.state = 'idle';
+          avatarStateBadge.textContent = 'idle';
+        }
+      }
 
+      voiceToggleBtn.addEventListener('click', () => {
         if (voiceModeActive) {
-          startListeningIfStillIdle();
+          stopVoiceMode();
         } else {
-          stt.stop();
-          noSpeechRestartPending = false;
-          if (avatarPanel.dataset.state === 'listening' || avatarPanel.dataset.state === 'error') {
-            avatarPanel.dataset.state = 'idle';
-            avatarStateBadge.textContent = 'idle';
-          }
+          voiceModeActive = true;
+          voiceToggleBtn.dataset.active = 'true';
+          startListeningIfStillIdle();
         }
       });
 
