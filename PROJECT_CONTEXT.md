@@ -20,6 +20,7 @@ live in the page — not a static image, not a canned animation.
 app/
   main.py            FastAPI app: all routes, dotenv loading, error handling
   bedrock.py          AWS Bedrock call + persona system prompt
+  personas.py         Persona registry (HCP identity + safety framing)
   tts.py               ElevenLabs text-to-speech + voice list
   avatar_provider.py  Abstract interface any avatar vendor must implement
   avatar_simli.py     Simli-specific implementation of that interface
@@ -200,6 +201,55 @@ ElevenLabs audio plays, Simli video and lip-sync work, and the
 after turn. This is a confirmed working feature, not an unverified one —
 treat it as part of the stable baseline the same as the rest of this
 document, not as "implemented but unconfirmed."
+
+## Roleplay Sessions
+
+A user can configure a structured roleplay before chatting: HCP persona,
+scenario, conversation objective, persona mood/behavior, and difficulty
+(easy/medium/hard). Once started, this becomes dynamic system-prompt
+context for the *same* Bedrock conversation Text Chat and Live Voice
+already share — no new conversation pipeline, no backend persistence.
+
+**Persona registry** (`app/personas.py`, `PERSONAS: dict[str, Persona]`):
+a `Persona` is `{id, name, role_title, base_description, safety_framing}`.
+Dr. Sarah Chen is the only entry today, structurally no different from any
+future persona — adding one is one dict entry. `safety_framing` lives on
+the persona (not globally) so a future non-medical HCP persona can carry
+different disclaimer language.
+
+**Dynamic system prompt** (`app/bedrock.py`): `build_system_prompt(persona,
+session)` composes persona + scenario + objective + mood + a
+difficulty-specific instruction (from `DIFFICULTY_INSTRUCTIONS`) into the
+prompt Bedrock receives. Called with `persona=None, session=None`, it
+returns `DEFAULT_SYSTEM_PROMPT` — today's original hardcoded prompt,
+unchanged — which is what keeps `/chat` backward compatible: a request
+that omits `session` behaves exactly as it did before this feature
+existed.
+
+**Session model**: held client-side only, exactly like the existing
+`conversation` array — no session ID, no server-side store, per this
+project's stateless-backend decision. `POST /chat`'s `session` field is
+optional; the frontend sends it once a roleplay has been started via the
+new setup form. `GET /personas` lists available personas for that form's
+picker, mirroring `GET /voices`'s existing shape/pattern.
+
+**Shared across Text Chat and Live Voice**: both already call the one
+`sendToSarah(message)` pipeline (see "Live Voice Conversation
+integration" above); that function includes the active `roleplaySession`
+in every `/chat` call, so neither mode needed its own roleplay wiring.
+Starting a new roleplay (the "New Roleplay" button) resets both the
+session and the conversation array together — a persona swap mid-
+transcript wouldn't be a coherent conversation.
+
+**Extensibility, deliberately not built yet**: scoring, compliance
+detection, document/RAG grounding, and Admin persona management are all
+out of scope for this milestone. Because `objective`/`difficulty`/
+`scenario` are structured fields (not buried in prompt text), and personas
+are already a separate typed registry from sessions, each of those can
+attach later — a new endpoint or a new parameter to `build_system_prompt`
+— without reworking how sessions flow through the app. See
+`docs/superpowers/specs/2026-09-17-roleplay-sessions-design.md` for the
+full rationale.
 
 ## ElevenLabs TTS integration (`app/tts.py`)
 
