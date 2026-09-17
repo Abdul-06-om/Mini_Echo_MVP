@@ -191,6 +191,16 @@ separate conversations to reconcile.
 See `docs/superpowers/specs/2026-09-17-live-voice-conversation-design.md`
 for the full design rationale and rejected alternatives.
 
+**Manually verified end-to-end in Chrome by the user** (2026-09-17), across
+multiple consecutive turns: microphone input is captured, speech is
+transcribed correctly, the transcribed text appears in the shared
+conversation alongside typed messages, Sarah's Bedrock reply is correct,
+ElevenLabs audio plays, Simli video and lip-sync work, and the
+`listening → thinking → speaking → listening` loop repeats correctly turn
+after turn. This is a confirmed working feature, not an unverified one —
+treat it as part of the stable baseline the same as the rest of this
+document, not as "implemented but unconfirmed."
+
 ## ElevenLabs TTS integration (`app/tts.py`)
 
 - `synthesize_speech(text, voice_id=DEFAULT_VOICE_ID) -> bytes`: POSTs to
@@ -309,6 +319,10 @@ viewport (`100dvh`) dark cinematic layout:
   failed `/chat` call so the conversation array can't desync
 - Disclaimer banner (unobtrusive, cinematic-redesigned, wording unchanged)
 - Cinematic dark UI, responsive down to mobile
+- Live Voice Conversation mode (desktop Chrome): mic toggle → browser
+  Speech-to-Text → the same Bedrock/ElevenLabs/Simli pipeline as Text Chat →
+  automatic re-listening, manually verified end-to-end by the user — see
+  "Live Voice Conversation integration" above
 
 ## Known issues / open items
 
@@ -409,8 +423,11 @@ installed; both `esbuild` and `simli-client` are declared in `package.json`.)
     target these exact class names, nothing else is available to style on them
   - The `DoctorAvatar` constructor's expected shape:
     `{ videoEl, audioEl, panelEl, stateEl }`
-  - The five real states and nothing invented beyond them:
-    `connecting`, `idle`, `thinking`, `speaking`, `error`
+  - The five states `DoctorAvatar` itself emits, and nothing invented beyond
+    them there: `connecting`, `idle`, `thinking`, `speaking`, `error`. A 6th
+    state, `listening`, exists at the page level (set by the voice
+    controller in `static/index.html`, never by `DoctorAvatar`) — see "Live
+    Voice Conversation integration" above.
 - The `position: absolute` overlay + inline-style-toggle fix for the video/poster
   (regressing to `hidden`-attribute-only toggling or removing the absolute
   positioning reintroduces the "invisible video" bug)
@@ -425,24 +442,9 @@ installed; both `esbuild` and `simli-client` are declared in `package.json`.)
 - Never put a Simli or ElevenLabs (or any future provider's) API key in
   frontend code or expose it via an API response
 
-## Next planned feature: Text Chat + Live Voice Conversation mode
+## Next planned feature
 
-Not yet started. The intended flow, as specified by the user:
-
-```
-microphone -> STT -> existing Bedrock conversation -> ElevenLabs -> Simli -> listen again
-```
-
-I.e., a continuous voice-conversation mode alongside the existing typed-chat mode:
-the user speaks instead of typing, speech is transcribed (speech-to-text — no STT
-provider has been chosen yet), the transcribed text is sent through the *existing*
-`/chat` → Bedrock → `/tts` → Simli pipeline unchanged, and after the avatar
-finishes speaking, the app starts listening again automatically. This will need,
-at minimum: microphone permission (its own gesture/permission dance, likely
-similar in spirit to the audio-unlock fix), a real "listening" state (which does
-not exist yet — see Known Issues/state list above; this is the feature that would
-finally justify adding one), an STT provider decision (browser
-`SpeechRecognition` vs. a cloud STT API — not yet researched or decided), and a
-turn-taking loop (don't listen while the avatar is speaking). None of this is
-designed yet — treat it as the next thing to brainstorm properly, the same way
-the avatar feature itself was brainstormed before being built.
+None currently planned. Live Voice Conversation (mic → STT → existing
+Bedrock/ElevenLabs/Simli pipeline → auto-listen) was the previously-planned
+next feature — see "Live Voice Conversation integration" above — and is now
+built and manually verified end-to-end. Nothing is queued up after it.
