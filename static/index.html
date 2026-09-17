@@ -65,6 +65,9 @@
   #avatar-panel[data-state="error"] #avatar-state-badge {
     background: rgba(180, 0, 0, 0.85);
   }
+  #avatar-panel[data-state="connecting"] #avatar-state-badge {
+    background: rgba(90, 90, 90, 0.85);
+  }
   .persona-name {
     font-weight: 600;
     font-size: 1.05rem;
@@ -165,12 +168,12 @@
 <body>
   <h1>Mini ECHO</h1>
   <div id="app-layout">
-    <div id="avatar-panel" data-state="idle">
+    <div id="avatar-panel" data-state="connecting">
       <div id="avatar-video-wrap">
         <img id="avatar-poster" src="/static/avatar.jpg" alt="Dr. Sarah Chen">
         <video id="avatar-video" autoplay playsinline hidden></video>
         <audio id="avatar-audio" autoplay></audio>
-        <span id="avatar-state-badge">idle</span>
+        <span id="avatar-state-badge">connecting</span>
       </div>
       <div class="persona-name">Dr. Sarah Chen</div>
       <div class="persona-role">General Practitioner</div>
@@ -207,6 +210,8 @@
     let conversation = [];
     let voices = [];
 
+    console.log('[page] MiniEchoAvatar bundle loaded:', typeof MiniEchoAvatar !== 'undefined');
+
     const avatar = new MiniEchoAvatar.DoctorAvatar({
       videoEl: avatarVideo,
       audioEl: avatarAudio,
@@ -215,8 +220,18 @@
     });
 
     avatarVideo.addEventListener('playing', () => {
+      console.log('[page] video element fired "playing" — showing live video, hiding poster');
       avatarVideo.hidden = false;
       avatarPoster.hidden = true;
+    });
+    avatarVideo.addEventListener('error', (event) => {
+      console.error('[page] video element error:', avatarVideo.error, event);
+    });
+    avatarAudio.addEventListener('play', () => {
+      console.log('[page] audio element started playing');
+    });
+    avatarAudio.addEventListener('error', (event) => {
+      console.error('[page] audio element error:', avatarAudio.error, event);
     });
 
     avatar.connect();
