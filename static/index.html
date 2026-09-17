@@ -832,6 +832,11 @@
         difficulty: difficultySelect.value,
       };
 
+      if (selectedPersona.voice_id && voices.some((v) => v.voice_id === selectedPersona.voice_id)) {
+        voiceSelect.value = selectedPersona.voice_id;
+        localStorage.setItem('voiceId', selectedPersona.voice_id);
+      }
+
       activePersonaName.textContent = selectedPersona.name;
       activePersonaRole.textContent = selectedPersona.role_title;
 
