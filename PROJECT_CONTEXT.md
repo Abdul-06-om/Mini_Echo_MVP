@@ -33,6 +33,8 @@ static/
   index.html          The entire frontend: cinematic UI markup/CSS + two inline
                        <script> blocks (chat logic + avatar wiring)
   avatar.jpg           Poster image shown before the live video connects / on error
+  stt-web-speech.js   Browser Web Speech API wrapper for Live Voice mode (plain
+                       script, not bundled)
   dist/avatar-bundle.js  Built output of avatar-src/doctor-avatar.js (esbuild IIFE
                           bundle, ~900KB, includes livekit-client). Committed to git.
                           MUST be rebuilt after any avatar-src change — the served
@@ -124,12 +126,70 @@ avatar, no image/likeness was uploaded.
   in one call, no chunking needed (confirmed by reading `simli-client`'s actual
   source; `sendAudioData` just forwards the whole array over an open WebSocket).
 - States actually emitted by this component, and only these five:
-  `"connecting"`, `"idle"`, `"thinking"`, `"speaking"`, `"error"`. There is no
-  "listening" state (nothing in this app does speech-to-text yet — see Next
-  Planned Feature). Do not invent one without real logic behind it.
+  `"connecting"`, `"idle"`, `"thinking"`, `"speaking"`, `"error"`. A sixth state,
+  `"listening"`, is added by the Live Voice Conversation feature (see below) but
+  is not emitted by `DoctorAvatar` itself — it is set directly on the page's
+  `#avatar-panel` element by the voice controller.
 - `speaking`/`silent` (SDK events, driven by Simli's own server-side detection of
   the audio we send it) drive the speaking/idle transitions — not a timer, not a
   guess.
+
+## Live Voice Conversation integration
+
+Alongside typed Text Chat, the page now supports a voice-first mode: the
+user speaks, the browser transcribes it, and the transcript is sent through
+the *same* `/chat` → Bedrock → `/tts` → Simli pipeline Text Chat already
+uses — no new backend route exists or was needed.
+
+**STT provider** (`static/stt-web-speech.js`, `window.MiniEchoSTT.WebSpeechSTT`):
+wraps the browser's native `SpeechRecognition`/`webkitSpeechRecognition` API
+(`continuous: false`, `interimResults: false` — one utterance per listening
+turn). Desktop Chrome only; Safari and Firefox lack this API, so the mic
+toggle button renders `disabled` with an explanatory tooltip there and Text
+Chat is unaffected. Deliberately not run through esbuild — it's a native
+browser global, no npm package involved, so the build step stays scoped to
+`avatar-src/doctor-avatar.js` as before. Requires no new API key, account, or
+AWS permission. Kept behind a 3-callback interface
+(`onFinalResult`/`onError`/`onListeningChange`) plus `start()`/`stop()`
+specifically so a future cloud STT provider can be swapped in by writing one
+new file with the same shape and changing one instantiation line in
+`static/index.html` — mirroring the existing `avatar_provider.py` /
+`app/tts.py` isolation pattern.
+
+**New `listening` state**: a 6th avatar state alongside the original five
+(`connecting, idle, thinking, speaking, error`). Unlike those five, it is
+set directly on `#avatar-panel`'s `data-state` (and mirrored onto
+`#avatar-state-badge`'s text) by the page's voice controller in
+`static/index.html`, not by `DoctorAvatar` — `avatar-src/doctor-avatar.js`
+was not modified and has no awareness voice mode exists.
+
+**Turn-taking loop**: clicking the mic button (`#voice-toggle-btn`) starts
+listening only while the avatar is `idle`. A `MutationObserver` on
+`#avatar-panel`'s `data-state` attribute restarts listening every time the
+avatar returns to `idle` after speaking (the existing `"silent"` SDK event,
+observed indirectly), forming
+`listening -> thinking -> speaking -> listening` automatically until the
+button is toggled off. A "no-speech" recognition error just restarts
+listening rather than stopping voice mode; other errors (e.g. mic permission
+denied) stop voice mode and show an inline error bubble, the same visual
+pattern Text Chat already uses for failed `/chat` calls.
+
+**Preventing Sarah's voice from being captured by the mic**: purely a
+scheduling guarantee, not audio processing. The recognizer is only ever
+started while state is `idle`, and `sendToSarah()` — the single function
+both Text Chat and voice mode call — unconditionally stops any active
+recognition as its first action, before `avatar.think()`/`avatar.speak()`
+run. This covers both the voice-triggered turn and the edge case of a typed
+message being sent while the mic happens to be listening.
+
+**Shared conversation history**: no backend or data-model change. Text Chat
+and Live Voice both call `sendToSarah(message)`, which pushes into the same
+top-level `conversation` array and appends to the same `#chat` log
+regardless of which mode produced the message — the two modes were never
+separate conversations to reconcile.
+
+See `docs/superpowers/specs/2026-09-17-live-voice-conversation-design.md`
+for the full design rationale and rejected alternatives.
 
 ## ElevenLabs TTS integration (`app/tts.py`)
 
@@ -271,6 +331,10 @@ viewport (`100dvh`) dark cinematic layout:
   (the app version has a persona system prompt and conversation-list support, the
   script is still the frozen single-message Step 2 version) — this is intentional
   per earlier design review, not drift to "fix."
+- Live Voice Conversation mode (the mic button and listening state) requires
+  desktop Chrome — the browser's native `SpeechRecognition` API is not available
+  in Safari or Firefox. On those browsers, the mic button is disabled with an
+  explanatory tooltip and Text Chat mode works normally.
 
 ## Tests and how to run them
 
