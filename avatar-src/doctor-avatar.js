@@ -10,7 +10,40 @@ export class DoctorAvatar {
     this.stateEl = stateEl;
     this.client = null;
     this.state = "connecting";
+    this._audioUnlocked = false;
     this._setState("connecting");
+    this._setupAudioUnlock();
+  }
+
+  // Chrome (and other browsers) block <audio>/<video> playback that has sound
+  // until the page has received a real user gesture. Simli's video track has
+  // no sound (audio arrives on a separate <audio> element), so it autoplays
+  // fine — but that separate <audio> element's first play() attempt, fired
+  // automatically by the SDK the moment the remote track arrives, happens
+  // before any click and is rejected by the browser. This does not create or
+  // resume any AudioContext, and does not call play() itself before a
+  // gesture — it only retries the SAME element's play() once a gesture has
+  // actually happened, which is what actually unlocks it.
+  _setupAudioUnlock() {
+    const unlock = () => {
+      if (this._audioUnlocked) return;
+      this._audioUnlocked = true;
+      console.log(LOG_PREFIX, "user gesture detected — retrying audio playback");
+      const playPromise = this.audioEl.play();
+      if (playPromise && typeof playPromise.then === "function") {
+        playPromise
+          .then(() => console.log(LOG_PREFIX, "audio playback unlocked successfully"))
+          .catch((error) =>
+            console.warn(LOG_PREFIX, "audio playback still blocked after gesture (will retry on next speak):", error),
+          );
+      }
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+      document.removeEventListener("touchstart", unlock);
+    };
+    document.addEventListener("click", unlock, { once: true });
+    document.addEventListener("keydown", unlock, { once: true });
+    document.addEventListener("touchstart", unlock, { once: true });
   }
 
   async connect() {
