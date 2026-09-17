@@ -10,8 +10,11 @@ TEST_PERSONA = Persona(
     id="test_persona",
     name="Dr. Test",
     role_title="Test Role",
+    category="doctor",
     base_description="BASE DESCRIPTION.",
     safety_framing="SAFETY FRAMING.",
+    voice_id="test-voice-id",
+    face_id="test-face-id",
 )
 TEST_SESSION = {
     "scenario": "Test scenario",

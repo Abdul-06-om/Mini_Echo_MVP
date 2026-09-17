@@ -3,7 +3,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.personas import PERSONAS
+from app.personas import get_persona
 
 client = TestClient(app)
 
@@ -146,7 +146,7 @@ def test_chat_endpoint_with_roleplay_session_passes_persona_and_session(mock_get
     assert response.json() == {"reply": "In character reply"}
     mock_get_reply.assert_called_once_with(
         [{"role": "user", "content": "Hello doctor"}],
-        persona=PERSONAS["dr_sarah_chen"],
+        persona=get_persona("dr_sarah_chen"),
         session=session_payload,
     )
 
@@ -174,5 +174,12 @@ def test_personas_returns_registered_personas():
 
     assert response.status_code == 200
     assert response.json() == [
-        {"id": "dr_sarah_chen", "name": "Dr. Sarah Chen", "role_title": "General Practitioner"}
+        {
+            "id": "dr_sarah_chen",
+            "name": "Dr. Sarah Chen",
+            "role_title": "General Practitioner",
+            "category": "doctor",
+            "voice_id": "EXAVITQu4vr4xnSDxMaL",
+            "face_id": "f0ba4efe-7946-45de-9955-c04a04c367b9",
+        }
     ]

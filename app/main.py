@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.avatar_simli import SimliAvatarProvider
 from app.bedrock import get_reply
-from app.personas import PERSONAS
+from app.personas import get_persona, list_personas
 from app.tts import list_voices, synthesize_speech
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ def chat(request: ChatRequest):
     persona = None
     session_dict = None
     if request.session is not None:
-        persona = PERSONAS.get(request.session.persona_id)
+        persona = get_persona(request.session.persona_id)
         if persona is None:
             raise HTTPException(status_code=400, detail="Unknown persona_id.")
         session_dict = request.session.model_dump()
@@ -90,8 +90,15 @@ def chat(request: ChatRequest):
 @app.get("/personas")
 def personas():
     return [
-        {"id": p.id, "name": p.name, "role_title": p.role_title}
-        for p in PERSONAS.values()
+        {
+            "id": p.id,
+            "name": p.name,
+            "role_title": p.role_title,
+            "category": p.category,
+            "voice_id": p.voice_id,
+            "face_id": p.face_id,
+        }
+        for p in list_personas()
     ]
 
 

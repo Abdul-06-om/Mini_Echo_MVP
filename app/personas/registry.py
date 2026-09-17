@@ -1,20 +1,11 @@
-from dataclasses import dataclass
+from app.personas.models import Persona
 
-
-@dataclass(frozen=True)
-class Persona:
-    id: str
-    name: str
-    role_title: str
-    base_description: str
-    safety_framing: str
-
-
-PERSONAS: dict[str, Persona] = {
+_PERSONAS: dict[str, Persona] = {
     "dr_sarah_chen": Persona(
         id="dr_sarah_chen",
         name="Dr. Sarah Chen",
         role_title="General Practitioner",
+        category="doctor",
         base_description=(
             "You are Dr. Sarah Chen, a friendly and experienced general "
             "practitioner taking part in a training roleplay conversation. "
@@ -29,5 +20,15 @@ PERSONAS: dict[str, Persona] = {
             "emergency, tell them to contact real emergency services "
             "immediately."
         ),
+        voice_id="EXAVITQu4vr4xnSDxMaL",
+        face_id="f0ba4efe-7946-45de-9955-c04a04c367b9",
     ),
 }
+
+
+def get_persona(persona_id: str) -> Persona | None:
+    return _PERSONAS.get(persona_id)
+
+
+def list_personas() -> list[Persona]:
+    return list(_PERSONAS.values())
