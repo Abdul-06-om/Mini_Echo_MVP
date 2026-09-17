@@ -34,10 +34,12 @@
   }
   #avatar-video-wrap img,
   #avatar-video-wrap video {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    display: block;
   }
   #avatar-video-wrap img {
     object-position: 35% 20%;
@@ -221,8 +223,32 @@
 
     avatarVideo.addEventListener('playing', () => {
       console.log('[page] video element fired "playing" — showing live video, hiding poster');
-      avatarVideo.hidden = false;
-      avatarPoster.hidden = true;
+      console.log('[page] video diagnostics:', {
+        readyState: avatarVideo.readyState,
+        paused: avatarVideo.paused,
+        videoWidth: avatarVideo.videoWidth,
+        videoHeight: avatarVideo.videoHeight,
+        srcObject: avatarVideo.srcObject,
+        tracks: avatarVideo.srcObject
+          ? avatarVideo.srcObject.getVideoTracks().map((t) => ({
+              readyState: t.readyState,
+              muted: t.muted,
+              enabled: t.enabled,
+            }))
+          : null,
+      });
+      // Inline styles always win over any external stylesheet rule,
+      // regardless of CSS specificity — avoids repeating the earlier bug
+      // where a same-specificity rule silently overrode `hidden`.
+      avatarVideo.style.display = 'block';
+      avatarPoster.style.display = 'none';
+
+      let checks = 0;
+      const progressCheck = setInterval(() => {
+        checks += 1;
+        console.log('[page] video frame-progress check', checks, '— currentTime:', avatarVideo.currentTime.toFixed(2));
+        if (checks >= 5) clearInterval(progressCheck);
+      }, 1000);
     });
     avatarVideo.addEventListener('error', (event) => {
       console.error('[page] video element error:', avatarVideo.error, event);
