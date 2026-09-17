@@ -446,7 +446,7 @@
     height: 17px;
   }
 
-  #voice-toggle-btn {
+  form#chat-form #voice-toggle-btn {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -468,7 +468,7 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
-  #voice-toggle-btn[data-active="true"] {
+  form#chat-form #voice-toggle-btn[data-active="true"] {
     background: var(--accent);
     border-color: var(--accent);
     color: #08211d;
@@ -563,7 +563,7 @@
     const chat = document.getElementById('chat');
     const form = document.getElementById('chat-form');
     const input = document.getElementById('message-input');
-    const button = form.querySelector('button');
+    const button = form.querySelector('button[type="submit"]');
     const avatarTemplate = document.getElementById('avatar-template');
     const voiceSelect = document.getElementById('voice-select');
     const avatarVideo = document.getElementById('avatar-video');
@@ -703,6 +703,10 @@
       } catch (error) {
         conversation.pop();
         addMessage('Something went wrong. Please try again.', 'error');
+        if (avatarPanel.dataset.state !== 'idle') {
+          avatarPanel.dataset.state = 'idle';
+          avatarStateBadge.textContent = 'idle';
+        }
       } finally {
         isSending = false;
         input.disabled = false;
@@ -721,17 +725,18 @@
 
     const voiceToggleBtn = document.getElementById('voice-toggle-btn');
     let voiceModeActive = false;
+    let noSpeechRestartPending = false;
 
-    const stt = MiniEchoSTT.WebSpeechSTT.isSupported
-      ? new MiniEchoSTT.WebSpeechSTT({
+    const stt = (window.MiniEchoSTT && window.MiniEchoSTT.WebSpeechSTT.isSupported)
+      ? new window.MiniEchoSTT.WebSpeechSTT({
           onFinalResult: (transcript) => {
             stt.stop();
             sendToSarah(transcript);
           },
           onError: (error) => {
             if (error === 'no-speech' && voiceModeActive) {
-              console.log('[page] no speech detected, listening again');
-              stt.start();
+              console.log('[page] no speech detected, will listen again once recognition fully stops');
+              noSpeechRestartPending = true;
               return;
             }
             console.warn('[page] voice mode stopped due to STT error:', error);
@@ -748,6 +753,12 @@
               'error',
             );
           },
+          onListeningChange: (isListening) => {
+            if (!isListening && noSpeechRestartPending) {
+              noSpeechRestartPending = false;
+              stt.start();
+            }
+          },
         })
       : null;
 
@@ -755,19 +766,28 @@
       voiceToggleBtn.disabled = true;
       voiceToggleBtn.title = 'Live voice mode requires a browser with SpeechRecognition support (e.g. desktop Chrome)';
     } else {
+      function startListeningIfStillIdle() {
+        if (!voiceModeActive) return;
+        if (avatarPanel.dataset.state !== 'idle') return;
+        setTimeout(() => {
+          if (voiceModeActive && avatarPanel.dataset.state === 'idle') {
+            avatarPanel.dataset.state = 'listening';
+            avatarStateBadge.textContent = 'listening';
+            stt.start();
+          }
+        }, 300);
+      }
+
       voiceToggleBtn.addEventListener('click', () => {
         voiceModeActive = !voiceModeActive;
         voiceToggleBtn.dataset.active = String(voiceModeActive);
 
         if (voiceModeActive) {
-          if (avatarPanel.dataset.state === 'idle') {
-            avatarPanel.dataset.state = 'listening';
-            avatarStateBadge.textContent = 'listening';
-            stt.start();
-          }
+          startListeningIfStillIdle();
         } else {
           stt.stop();
-          if (avatarPanel.dataset.state === 'listening') {
+          noSpeechRestartPending = false;
+          if (avatarPanel.dataset.state === 'listening' || avatarPanel.dataset.state === 'error') {
             avatarPanel.dataset.state = 'idle';
             avatarStateBadge.textContent = 'idle';
           }
@@ -775,12 +795,7 @@
       });
 
       const voiceStateObserver = new MutationObserver(() => {
-        if (!voiceModeActive) return;
-        if (avatarPanel.dataset.state === 'idle') {
-          avatarPanel.dataset.state = 'listening';
-          avatarStateBadge.textContent = 'listening';
-          stt.start();
-        }
+        startListeningIfStillIdle();
       });
       voiceStateObserver.observe(avatarPanel, { attributes: true, attributeFilter: ['data-state'] });
     }
