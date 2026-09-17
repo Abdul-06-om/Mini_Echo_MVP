@@ -263,6 +263,19 @@ attach later — a new endpoint or a new parameter to `build_system_prompt`
 `docs/superpowers/specs/2026-09-17-roleplay-sessions-design.md` for the
 full rationale.
 
+**Manually verified end-to-end in Chrome by the user** (2026-09-17):
+Start Roleplay setup (persona, scenario, objective, mood, difficulty) all
+work; Text Chat inside an active roleplay gets Bedrock replies that
+reflect the configured scenario/objective/mood/difficulty, not the old
+generic persona; ElevenLabs audio and Simli video/lip-sync both work
+inside a roleplay; Live Voice's full `listening → thinking → speaking →
+listening` loop works inside a roleplay across multiple consecutive voice
+turns, without Sarah's own speech being picked back up as the user's next
+turn; and the pre-existing Text Chat and Live Voice functionality outside
+of Roleplay Sessions continues to work unchanged. This is a confirmed
+working feature, not an unverified one — treat it as part of the stable
+baseline the same as the rest of this document.
+
 ## ElevenLabs TTS integration (`app/tts.py`)
 
 - `synthesize_speech(text, voice_id=DEFAULT_VOICE_ID) -> bytes`: POSTs to
@@ -388,6 +401,11 @@ viewport (`100dvh`) dark cinematic layout:
   Speech-to-Text → the same Bedrock/ElevenLabs/Simli pipeline as Text Chat →
   automatic re-listening, manually verified end-to-end by the user — see
   "Live Voice Conversation integration" above
+- Roleplay Sessions: structured persona/scenario/objective/mood/difficulty
+  setup that becomes dynamic Bedrock context for both Text Chat and Live
+  Voice, manually verified end-to-end by the user (including multiple
+  consecutive Live Voice turns inside an active roleplay) — see "Roleplay
+  Sessions" above
 
 ## Known issues / open items
 
@@ -515,7 +533,7 @@ installed; both `esbuild` and `simli-client` are declared in `package.json`.)
 ## Next planned feature
 
 None currently planned. Roleplay Sessions (structured persona/scenario/
-objective/mood/difficulty config as dynamic Bedrock context) was the
-previously-planned next feature — see "Roleplay Sessions" above — and is now
-built, pending the user's manual browser confirmation. Nothing is queued up
-after it.
+objective/mood/difficulty config as dynamic Bedrock context, shared by
+Text Chat and Live Voice) was the previously-planned next feature — see
+"Roleplay Sessions" above — and is now built and manually verified
+end-to-end by the user. Nothing is queued up after it.
