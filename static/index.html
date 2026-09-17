@@ -686,9 +686,20 @@
     const avatarPoster = document.getElementById('avatar-poster');
     const avatarPanel = document.getElementById('avatar-panel');
     const avatarStateBadge = document.getElementById('avatar-state-badge');
+    const roleplaySetupForm = document.getElementById('roleplay-setup');
+    const personaSelect = document.getElementById('persona-select');
+    const scenarioInput = document.getElementById('scenario-input');
+    const objectiveInput = document.getElementById('objective-input');
+    const moodInput = document.getElementById('mood-input');
+    const difficultySelect = document.getElementById('difficulty-select');
+    const newRoleplayBtn = document.getElementById('new-roleplay-btn');
+    const activePersonaName = document.getElementById('active-persona-name');
+    const activePersonaRole = document.getElementById('active-persona-role');
     let isSending = false;
     let conversation = [];
     let voices = [];
+    let personas = [];
+    let roleplaySession = null;
 
     console.log('[page] MiniEchoAvatar bundle loaded:', typeof MiniEchoAvatar !== 'undefined');
 
@@ -770,6 +781,61 @@
 
     populateVoices();
 
+    async function populatePersonas() {
+      try {
+        const response = await fetch('/personas');
+        if (!response.ok) throw new Error('Failed to load personas');
+        personas = await response.json();
+      } catch (error) {
+        console.error('Failed to load personas', error);
+        personas = [];
+      }
+
+      personaSelect.replaceChildren();
+      personas.forEach((persona) => {
+        const option = document.createElement('option');
+        option.value = persona.id;
+        option.textContent = persona.name + ' — ' + persona.role_title;
+        personaSelect.appendChild(option);
+      });
+    }
+
+    populatePersonas();
+
+    roleplaySetupForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+
+      const selectedPersona = personas.find((p) => p.id === personaSelect.value);
+      if (!selectedPersona) return;
+
+      roleplaySession = {
+        persona_id: selectedPersona.id,
+        scenario: scenarioInput.value.trim(),
+        objective: objectiveInput.value.trim(),
+        mood: moodInput.value.trim(),
+        difficulty: difficultySelect.value,
+      };
+
+      activePersonaName.textContent = selectedPersona.name;
+      activePersonaRole.textContent = selectedPersona.role_title;
+
+      roleplaySetupForm.style.display = 'none';
+      chat.style.display = 'flex';
+      form.style.display = 'flex';
+      newRoleplayBtn.hidden = false;
+    });
+
+    newRoleplayBtn.addEventListener('click', () => {
+      roleplaySession = null;
+      conversation = [];
+      chat.replaceChildren();
+
+      roleplaySetupForm.style.display = 'flex';
+      chat.style.display = 'none';
+      form.style.display = 'none';
+      newRoleplayBtn.hidden = true;
+    });
+
     function addMessage(text, sender) {
       const div = document.createElement('div');
       div.className = 'message ' + sender;
@@ -801,10 +867,15 @@
         addMessage(message, 'user');
         avatar.think();
 
+        const chatRequestBody = { messages: conversation };
+        if (roleplaySession) {
+          chatRequestBody.session = roleplaySession;
+        }
+
         const response = await fetch('/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: conversation }),
+          body: JSON.stringify(chatRequestBody),
         });
 
         if (!response.ok) {
