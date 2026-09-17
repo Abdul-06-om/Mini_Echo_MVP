@@ -189,6 +189,11 @@
   #avatar-panel[data-state="speaking"] #avatar-state-badge::after { content: "Speaking…"; }
   #avatar-panel[data-state="error"] #avatar-state-badge::before { background: var(--danger); }
   #avatar-panel[data-state="error"] #avatar-state-badge::after { content: "Connection issue"; }
+  #avatar-panel[data-state="listening"] #avatar-state-badge::before {
+    background: var(--accent);
+    animation: dot-pulse 1s ease-in-out infinite;
+  }
+  #avatar-panel[data-state="listening"] #avatar-state-badge::after { content: "Listening…"; }
 
   @keyframes dot-pulse {
     0%, 100% { opacity: 1; }
@@ -441,6 +446,42 @@
     height: 17px;
   }
 
+  #voice-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border: 1px solid var(--panel-border);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  #voice-toggle-btn:hover:not(:disabled) {
+    border-color: var(--accent-dim);
+    color: var(--text);
+  }
+  #voice-toggle-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  #voice-toggle-btn[data-active="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #08211d;
+  }
+  #voice-toggle-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  #voice-toggle-btn svg {
+    width: 17px;
+    height: 17px;
+  }
+
   @media (max-width: 860px) {
     #app-layout {
       flex-direction: column;
@@ -501,6 +542,9 @@
       </div>
       <div id="chat"></div>
       <form id="chat-form">
+        <button type="button" id="voice-toggle-btn" aria-label="Toggle live voice conversation" data-active="false">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <input id="message-input" type="text" placeholder="Type a message..." autocomplete="off" required>
         <button type="submit" aria-label="Send">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 12L20 4L14 20L11 13L4 12Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>
