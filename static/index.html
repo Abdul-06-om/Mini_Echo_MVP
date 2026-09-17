@@ -671,11 +671,8 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
+    async function sendToSarah(message) {
       if (isSending) return;
-
-      const message = input.value.trim();
       if (!message) return;
 
       isSending = true;
@@ -685,7 +682,6 @@
       try {
         conversation.push({ role: 'user', content: message });
         addMessage(message, 'user');
-        input.value = '';
         avatar.think();
 
         const response = await fetch('/chat', {
@@ -711,6 +707,14 @@
         button.disabled = false;
         input.focus();
       }
+    }
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const message = input.value.trim();
+      if (!message) return;
+      input.value = '';
+      sendToSarah(message);
     });
   </script>
 </body>
