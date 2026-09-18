@@ -1,5 +1,8 @@
+import pytest
+
 from app.bedrock import (
     DEFAULT_SYSTEM_PROMPT,
+    DIFFICULTY_INSTRUCTIONS,
     build_request_body,
     build_system_prompt,
     extract_reply_text,
@@ -74,3 +77,53 @@ def test_build_request_body_uses_dynamic_prompt_when_session_provided():
     assert body["system"] != DEFAULT_SYSTEM_PROMPT
     assert "BASE DESCRIPTION." in body["system"]
     assert body["messages"] == messages
+
+
+MATERIAL = "Zorivex achieved a 32% response rate in its pivotal trial."
+
+
+def test_build_system_prompt_without_reference_material_is_unchanged():
+    assert build_system_prompt(TEST_PERSONA, TEST_SESSION) == (
+        "BASE DESCRIPTION.\n\n"
+        "Scenario: Test scenario\n"
+        "Conversation objective: Test objective\n"
+        "Persona mood/behavior for this conversation: Test mood\n"
+        f"Difficulty: {DIFFICULTY_INSTRUCTIONS['medium']}\n\n"
+        "SAFETY FRAMING."
+    )
+
+
+def test_build_system_prompt_includes_reference_material_before_safety_framing():
+    prompt = build_system_prompt(
+        TEST_PERSONA, {**TEST_SESSION, "reference_material": MATERIAL}
+    )
+
+    assert f"<reference_material>\n{MATERIAL}\n</reference_material>" in prompt
+    assert "do not recite" in prompt
+    assert prompt.index("<reference_material>") < prompt.index("SAFETY FRAMING.")
+    assert prompt.endswith("SAFETY FRAMING.")
+
+
+def test_build_system_prompt_trims_reference_material():
+    prompt = build_system_prompt(
+        TEST_PERSONA, {**TEST_SESSION, "reference_material": f"  \n{MATERIAL}\n  "}
+    )
+
+    assert f"<reference_material>\n{MATERIAL}\n</reference_material>" in prompt
+
+
+@pytest.mark.parametrize("empty", [None, "", "   \n\t "])
+def test_build_system_prompt_ignores_empty_reference_material(empty):
+    baseline = build_system_prompt(TEST_PERSONA, TEST_SESSION)
+
+    prompt = build_system_prompt(
+        TEST_PERSONA, {**TEST_SESSION, "reference_material": empty}
+    )
+
+    assert prompt == baseline
+
+
+def test_build_system_prompt_without_persona_ignores_reference_material():
+    session = {**TEST_SESSION, "reference_material": MATERIAL}
+
+    assert build_system_prompt(None, session) == DEFAULT_SYSTEM_PROMPT
