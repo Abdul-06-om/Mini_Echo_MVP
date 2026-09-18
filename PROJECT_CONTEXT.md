@@ -67,15 +67,19 @@ Routes:
   conversation each call — backend is stateless), returns `{"reply": str}`.
   `session` is optional — see "Roleplay Sessions" below. Calls
   `app.bedrock.get_reply`.
-- `POST /avatar/session` — calls `avatar_provider.create_session()` (currently
-  `SimliAvatarProvider`), returns Simli's session token JSON as-is. This is what
-  lets the browser start a Simli WebRTC session without ever seeing the API key.
+- `POST /avatar/session` — body `{"face_id": str | None}`, calls
+  `avatar_provider.create_session()` (currently `SimliAvatarProvider`),
+  returns Simli's session token JSON as-is. `face_id` is optional and
+  defaults to the existing hardcoded Simli face constant when omitted —
+  see the Simli integration section below. This is what lets the browser
+  start a Simli WebRTC session without ever seeing the API key.
 - `GET /voices` — calls `app.tts.list_voices()`, returns `[{"voice_id", "name"}, ...]`
 - `POST /tts` — body `{"text": str, "voice_id": str | None}`, returns raw
   `audio/pcm` bytes (16-bit PCM, 16kHz, mono) from ElevenLabs.
-- `GET /personas` — returns `[{"id", "name", "role_title"}, ...]` from the
-  `app.personas.PERSONAS` registry. Unlike the routes above, this has no
-  try/except — there's no real failure mode for a static in-process dict.
+- `GET /personas` — returns `[{"id", "name", "role_title", "category",
+  "voice_id", "face_id"}, ...]` from the `app.personas` registry (via
+  `list_personas()`). Unlike the routes above, this has no try/except —
+  there's no real failure mode for a static in-process registry.
 
 Every route that calls a genuine upstream provider wraps that call in
 `try/except Exception`, logs the real exception server-side via
@@ -421,6 +425,11 @@ viewport (`100dvh`) dark cinematic layout:
   Voice, manually verified end-to-end by the user (including multiple
   consecutive Live Voice turns inside an active roleplay) — see "Roleplay
   Sessions" above
+- Persona Library: function-based persona registry (`category`/`voice_id`/
+  `face_id` fields) and `GET /personas`, verified by pytest; the
+  Roleplay setup form defaulting its voice selector to the persona's
+  `voice_id` is implemented but not yet verified in a real browser by the
+  user — see "Roleplay Sessions" above and "Next planned feature" below
 
 ## Known issues / open items
 
@@ -561,8 +570,9 @@ selection in the Roleplay setup form, and `face_id` modeled through
 `POST /avatar/session`) was the previously-planned next feature — see
 "Roleplay Sessions" above for the registry and
 `docs/superpowers/specs/2026-09-17-persona-library-design.md` for the
-full design rationale — and is now built and verified (pytest for the
-backend; the voice-default behavior via manual browser QA). Nothing is
-queued up after it. A follow-up milestone is expected once multiple real
+full design rationale — and is now built, with the backend verified by
+pytest; the persona-default voice-selection behavior in the Roleplay
+setup form has not yet been verified in a real browser by the user.
+Nothing is queued up after it. A follow-up milestone is expected once multiple real
 Simli face IDs are provisioned, to wire per-persona face switching and
 safe Simli reconnection.
