@@ -426,10 +426,13 @@ viewport (`100dvh`) dark cinematic layout:
   consecutive Live Voice turns inside an active roleplay) — see "Roleplay
   Sessions" above
 - Persona Library: function-based persona registry (`category`/`voice_id`/
-  `face_id` fields) and `GET /personas`, verified by pytest; the
-  Roleplay setup form defaulting its voice selector to the persona's
-  `voice_id` is implemented but not yet verified in a real browser by the
-  user — see "Roleplay Sessions" above and "Next planned feature" below
+  `face_id` fields) and `GET /personas`, verified by pytest; the Roleplay
+  setup form defaulting its voice selector to the persona's `voice_id`
+  (still user-overridable) has been manually verified end-to-end in
+  Chrome by the user (2026-09-18), alongside confirming plain Text Chat,
+  Live Voice, the Simli avatar, ElevenLabs audio, and audio-unlock all
+  continue to work unchanged — see "Roleplay Sessions" above and "Next
+  planned feature" below
 
 ## Known issues / open items
 
@@ -570,9 +573,12 @@ selection in the Roleplay setup form, and `face_id` modeled through
 `POST /avatar/session`) was the previously-planned next feature — see
 "Roleplay Sessions" above for the registry and
 `docs/superpowers/specs/2026-09-17-persona-library-design.md` for the
-full design rationale — and is now built, with the backend verified by
-pytest; the persona-default voice-selection behavior in the Roleplay
-setup form has not yet been verified in a real browser by the user.
-Nothing is queued up after it. A follow-up milestone is expected once multiple real
-Simli face IDs are provisioned, to wire per-persona face switching and
-safe Simli reconnection.
+full design rationale — and is now built and manually verified
+end-to-end by the user (2026-09-18): the backend by pytest, and the
+persona-default (still user-overridable) voice-selection behavior in the
+Roleplay setup form in a real browser, alongside confirming plain Text
+Chat, Live Voice, the Simli avatar, ElevenLabs audio, and audio-unlock
+all continue to work unchanged. Nothing is queued up after it. A
+follow-up milestone is expected once multiple real Simli face IDs are
+provisioned, to wire per-persona face switching and safe Simli
+reconnection.
