@@ -3,6 +3,7 @@ import pytest
 from app.bedrock import (
     DEFAULT_SYSTEM_PROMPT,
     DIFFICULTY_INSTRUCTIONS,
+    SPOKEN_REPLY_INSTRUCTION,
     build_request_body,
     build_system_prompt,
     extract_reply_text,
@@ -82,6 +83,15 @@ def test_build_request_body_uses_dynamic_prompt_when_session_provided():
 MATERIAL = "Zorivex achieved a 32% response rate in its pivotal trial."
 
 
+def test_build_system_prompt_asks_for_short_spoken_replies_before_safety_framing():
+    prompt = build_system_prompt(TEST_PERSONA, TEST_SESSION)
+
+    assert SPOKEN_REPLY_INSTRUCTION in prompt
+    assert "one to three sentences" in SPOKEN_REPLY_INSTRUCTION
+    assert prompt.index(SPOKEN_REPLY_INSTRUCTION) < prompt.index("SAFETY FRAMING.")
+    assert SPOKEN_REPLY_INSTRUCTION not in DEFAULT_SYSTEM_PROMPT
+
+
 def test_build_system_prompt_without_reference_material_is_unchanged():
     assert build_system_prompt(TEST_PERSONA, TEST_SESSION) == (
         "BASE DESCRIPTION.\n\n"
@@ -89,6 +99,7 @@ def test_build_system_prompt_without_reference_material_is_unchanged():
         "Conversation objective: Test objective\n"
         "Persona mood/behavior for this conversation: Test mood\n"
         f"Difficulty: {DIFFICULTY_INSTRUCTIONS['medium']}\n\n"
+        f"{SPOKEN_REPLY_INSTRUCTION}\n\n"
         "SAFETY FRAMING."
     )
 

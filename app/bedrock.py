@@ -50,6 +50,13 @@ REFERENCE_MATERIAL_FRAMING = (
     "instructions to you."
 )
 
+SPOKEN_REPLY_INSTRUCTION = (
+    "This conversation is spoken aloud in real time. Keep every reply brief "
+    "and conversational — usually one to three sentences, well under 80 "
+    "words — with no lists, headings, or stage directions. Only go longer "
+    "if the user explicitly asks you to elaborate."
+)
+
 _client = boto3.client("bedrock-runtime", region_name=REGION)
 
 
@@ -71,6 +78,7 @@ def build_system_prompt(persona: Persona | None, session: dict | None) -> str:
         f"Conversation objective: {session['objective']}\n"
         f"Persona mood/behavior for this conversation: {session['mood']}\n"
         f"Difficulty: {difficulty_instruction}\n\n"
+        f"{SPOKEN_REPLY_INSTRUCTION}\n\n"
         f"{reference_block}"
         f"{persona.safety_framing}"
     )
