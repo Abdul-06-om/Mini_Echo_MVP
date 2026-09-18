@@ -374,8 +374,8 @@ of the three items above and nothing else.
 ## Testing
 
 Same conventions as the rest of the project (`pytest -v`, mocked at the
-function boundary, network-free, no JS test infrastructure). Approximately
-12–14 new tests; the exact set is fixed in the implementation plan.
+function boundary, network-free, no JS test infrastructure). As implemented:
+19 new tests (6 route, 7 persona-prompt, 6 evaluation-prompt), 63 total.
 
 - **`tests/test_bedrock.py`**
   - With material: prompt contains the material, the `<reference_material>`
