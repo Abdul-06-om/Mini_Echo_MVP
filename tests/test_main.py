@@ -192,5 +192,21 @@ def test_personas_returns_registered_personas():
             "category": "doctor",
             "voice_id": "EXAVITQu4vr4xnSDxMaL",
             "face_id": "f0ba4efe-7946-45de-9955-c04a04c367b9",
-        }
+        },
+        {
+            "id": "dr_marcus_reyes",
+            "name": "Dr. Marcus Reyes",
+            "role_title": "Cardiologist",
+            "category": "doctor",
+            "voice_id": "IKne3meq5aSn9XLyUdCD",
+            "face_id": "f0ba4efe-7946-45de-9955-c04a04c367b9",
+        },
+        {
+            "id": "dr_priya_nair",
+            "name": "Dr. Priya Nair",
+            "role_title": "Oncologist",
+            "category": "doctor",
+            "voice_id": "SAz9YHcvj6GT2YYXdXww",
+            "face_id": "f0ba4efe-7946-45de-9955-c04a04c367b9",
+        },
     ]
