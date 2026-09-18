@@ -56,8 +56,9 @@ def test_build_evaluation_request_body_has_correct_shape():
     body = build_evaluation_request_body(messages, TEST_PERSONA, TEST_SESSION)
 
     assert body["anthropic_version"] == "bedrock-2023-05-31"
-    assert body["messages"] == messages
     assert "Dr. Test" in body["system"]
+    assert body["messages"][:-1] == messages
+    assert body["messages"][-1]["role"] == "user"
 
 
 def test_extract_evaluation_parses_valid_json():
@@ -118,3 +119,16 @@ def test_extract_evaluation_raises_for_non_string_field_value():
 
     with pytest.raises(ValueError):
         extract_evaluation(response_body)
+
+
+def test_extract_evaluation_strips_unexpected_fields():
+    polluted = json.loads(json.dumps(VALID_EVALUATION))
+    polluted["score"] = 95
+    polluted["dimensions"]["extra_field"] = "should not survive"
+    response_body = _response_with_text(json.dumps(polluted))
+
+    result = extract_evaluation(response_body)
+
+    assert result == VALID_EVALUATION
+    assert "score" not in result
+    assert "extra_field" not in result["dimensions"]

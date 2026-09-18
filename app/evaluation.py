@@ -45,7 +45,9 @@ def build_evaluation_request_body(
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": EVALUATION_MAX_TOKENS,
         "system": build_evaluation_prompt(persona, session),
-        "messages": messages,
+        "messages": messages + [
+            {"role": "user", "content": "Now produce the evaluation JSON object described above."}
+        ],
     }
 
 
@@ -59,10 +61,10 @@ def extract_evaluation(response_body: dict) -> dict:
 
     try:
         result = json.loads(text)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as error:
         start, end = text.find("{"), text.rfind("}")
         if start == -1 or end == -1 or end < start:
-            raise ValueError("Malformed evaluation response: not valid JSON")
+            raise ValueError("Malformed evaluation response: not valid JSON") from error
         try:
             result = json.loads(text[start : end + 1])
         except json.JSONDecodeError as error:
@@ -83,7 +85,11 @@ def extract_evaluation(response_body: dict) -> dict:
         if not isinstance(result.get(field), str):
             raise ValueError(f"Malformed evaluation response: missing {field}")
 
-    return result
+    return {
+        "dimensions": {field: dimensions[field] for field in REQUIRED_FIELDS},
+        "overall_summary": result["overall_summary"],
+        "improvement_recommendations": result["improvement_recommendations"],
+    }
 
 
 def get_evaluation(messages: list, persona: Persona, session: dict) -> dict:

@@ -443,6 +443,8 @@
     color: var(--text);
     font-family: 'Inter', sans-serif;
     font-size: 0.9rem;
+    max-height: 50vh;
+    overflow-y: auto;
   }
   #feedback-panel h3 {
     margin: 0 0 0.75rem;
@@ -1023,8 +1025,8 @@
 
     getFeedbackBtn.addEventListener('click', async () => {
       getFeedbackBtn.disabled = true;
-      const originalText = getFeedbackBtn.textContent;
       getFeedbackBtn.textContent = 'Evaluating…';
+      const sessionAtRequest = roleplaySession;
 
       try {
         const response = await fetch('/evaluate', {
@@ -1064,8 +1066,10 @@
         errorLine.textContent = 'Something went wrong generating feedback. Please try again.';
         feedbackContent.appendChild(errorLine);
       } finally {
-        feedbackPanel.style.display = 'block';
-        getFeedbackBtn.textContent = originalText;
+        if (roleplaySession === sessionAtRequest) {
+          feedbackPanel.style.display = 'block';
+        }
+        getFeedbackBtn.textContent = 'Get Feedback';
         updateFeedbackButtonState();
       }
     });
