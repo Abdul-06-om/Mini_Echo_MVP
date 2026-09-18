@@ -346,6 +346,7 @@
     color: var(--text-dim);
   }
   .roleplay-field input[type="text"],
+  .roleplay-field textarea,
   .roleplay-field select {
     appearance: none;
     -webkit-appearance: none;
@@ -359,10 +360,21 @@
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
   .roleplay-field input[type="text"]:focus,
+  .roleplay-field textarea:focus,
   .roleplay-field select:focus {
     outline: none;
     border-color: var(--accent-dim);
     box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .roleplay-field textarea {
+    resize: vertical;
+    min-height: 6rem;
+    line-height: 1.4;
+  }
+  .roleplay-field-hint {
+    font-size: 0.72rem;
+    line-height: 1.35;
+    color: var(--text-dim);
   }
   .roleplay-field select option {
     background: var(--bg-base-2);
@@ -722,6 +734,11 @@
             </select>
           </span>
         </label>
+        <!-- maxlength and the hint's 8000 mirror REFERENCE_MATERIAL_MAX_CHARS in app/main.py -->
+        <label class="roleplay-field">Reference Material (optional)
+          <textarea id="reference-material-input" rows="5" maxlength="8000" placeholder="Paste product or therapeutic-area facts to ground the conversation and the feedback — e.g. key clinical data, mechanism of action, approved messaging."></textarea>
+          <span class="roleplay-field-hint"><span id="reference-material-count">0</span> / 8000 characters. Mini ECHO does not verify this text — it is only as accurate as what you paste.</span>
+        </label>
         <button type="submit" id="start-roleplay-btn">Start Roleplay</button>
       </form>
       <div id="chat" style="display: none;"></div>
@@ -766,6 +783,8 @@
     const objectiveInput = document.getElementById('objective-input');
     const moodInput = document.getElementById('mood-input');
     const difficultySelect = document.getElementById('difficulty-select');
+    const referenceMaterialInput = document.getElementById('reference-material-input');
+    const referenceMaterialCount = document.getElementById('reference-material-count');
     const newRoleplayBtn = document.getElementById('new-roleplay-btn');
     const getFeedbackBtn = document.getElementById('get-feedback-btn');
     const feedbackPanel = document.getElementById('feedback-panel');
@@ -895,6 +914,12 @@
 
     populatePersonas();
 
+    function updateReferenceMaterialCount() {
+      referenceMaterialCount.textContent = referenceMaterialInput.value.length;
+    }
+    referenceMaterialInput.addEventListener('input', updateReferenceMaterialCount);
+    updateReferenceMaterialCount();
+
     roleplaySetupForm.addEventListener('submit', (event) => {
       event.preventDefault();
 
@@ -905,6 +930,7 @@
       const objective = objectiveInput.value.trim();
       const mood = moodInput.value.trim();
       if (!scenario || !objective || !mood) return;
+      const referenceMaterial = referenceMaterialInput.value.trim();
 
       roleplaySession = {
         persona_id: selectedPersona.id,
@@ -913,6 +939,7 @@
         mood,
         difficulty: difficultySelect.value,
       };
+      if (referenceMaterial) roleplaySession.reference_material = referenceMaterial;
 
       if (selectedPersona.voice_id && voices.some((v) => v.voice_id === selectedPersona.voice_id)) {
         voiceSelect.value = selectedPersona.voice_id;
