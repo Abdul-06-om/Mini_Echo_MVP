@@ -8,7 +8,7 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.avatar_simli import SimliAvatarProvider
 from app.bedrock import get_reply
@@ -29,12 +29,19 @@ class ChatMessage(BaseModel):
     content: str
 
 
+# Mini ECHO guardrail, mirrored by maxlength on #reference-material-input.
+REFERENCE_MATERIAL_MAX_CHARS = 8000
+
+
 class RoleplaySessionRequest(BaseModel):
     persona_id: str
     scenario: str
     objective: str
     mood: str
     difficulty: Literal["easy", "medium", "hard"]
+    reference_material: str | None = Field(
+        default=None, max_length=REFERENCE_MATERIAL_MAX_CHARS
+    )
 
 
 class ChatRequest(BaseModel):
@@ -80,7 +87,7 @@ def chat(request: ChatRequest):
         persona = get_persona(request.session.persona_id)
         if persona is None:
             raise HTTPException(status_code=400, detail="Unknown persona_id.")
-        session_dict = request.session.model_dump()
+        session_dict = request.session.model_dump(exclude_none=True)
 
     try:
         if persona is not None:
@@ -162,7 +169,9 @@ def evaluate(request: EvaluateRequest):
         raise HTTPException(status_code=400, detail="Unknown persona_id.")
 
     try:
-        result = get_evaluation(messages, persona, request.session.model_dump())
+        result = get_evaluation(
+            messages, persona, request.session.model_dump(exclude_none=True)
+        )
     except Exception:
         logger.exception("Evaluation failed")
         raise HTTPException(

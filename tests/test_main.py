@@ -300,3 +300,108 @@ def test_evaluate_endpoint_requires_session():
     )
 
     assert response.status_code == 422
+
+
+SESSION_BASE = {
+    "persona_id": "dr_sarah_chen",
+    "scenario": "Pharmaceutical sales call",
+    "objective": "Introduce a new treatment and handle objections",
+    "mood": "Skeptical, short on time",
+    "difficulty": "medium",
+}
+
+
+@patch("app.main.get_reply")
+def test_chat_passes_reference_material_to_get_reply(mock_get_reply):
+    mock_get_reply.return_value = "reply"
+    session_payload = {**SESSION_BASE, "reference_material": "Zorivex: 32% response rate."}
+
+    response = client.post(
+        "/chat",
+        json={"messages": [{"role": "user", "content": "Hi"}], "session": session_payload},
+    )
+
+    assert response.status_code == 200
+    mock_get_reply.assert_called_once_with(
+        [{"role": "user", "content": "Hi"}],
+        persona=get_persona("dr_sarah_chen"),
+        session=session_payload,
+    )
+
+
+@patch("app.main.get_reply")
+def test_chat_null_reference_material_is_omitted_from_session_dict(mock_get_reply):
+    mock_get_reply.return_value = "reply"
+
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [{"role": "user", "content": "Hi"}],
+            "session": {**SESSION_BASE, "reference_material": None},
+        },
+    )
+
+    assert response.status_code == 200
+    assert mock_get_reply.call_args.kwargs["session"] == SESSION_BASE
+
+
+@patch("app.main.get_reply")
+def test_chat_accepts_reference_material_at_the_cap(mock_get_reply):
+    mock_get_reply.return_value = "reply"
+
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [{"role": "user", "content": "Hi"}],
+            "session": {**SESSION_BASE, "reference_material": "x" * 8000},
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(mock_get_reply.call_args.kwargs["session"]["reference_material"]) == 8000
+
+
+@patch("app.main.get_reply")
+def test_chat_rejects_reference_material_over_the_cap(mock_get_reply):
+    response = client.post(
+        "/chat",
+        json={
+            "messages": [{"role": "user", "content": "Hi"}],
+            "session": {**SESSION_BASE, "reference_material": "x" * 8001},
+        },
+    )
+
+    assert response.status_code == 422
+    mock_get_reply.assert_not_called()
+
+
+@patch("app.main.get_evaluation")
+def test_evaluate_passes_reference_material_to_get_evaluation(mock_get_evaluation):
+    mock_get_evaluation.return_value = {"ok": True}
+    session_payload = {**SESSION_BASE, "reference_material": "Zorivex: 32% response rate."}
+
+    response = client.post(
+        "/evaluate",
+        json={"messages": [{"role": "user", "content": "Hi"}], "session": session_payload},
+    )
+
+    assert response.status_code == 200
+    mock_get_evaluation.assert_called_once_with(
+        [{"role": "user", "content": "Hi"}],
+        get_persona("dr_sarah_chen"),
+        session_payload,
+    )
+
+
+@patch("app.main.get_evaluation")
+def test_evaluate_rejects_reference_material_over_the_cap(mock_get_evaluation):
+    response = client.post(
+        "/evaluate",
+        json={
+            "messages": [{"role": "user", "content": "Hi"}],
+            "session": {**SESSION_BASE, "reference_material": "x" * 8001},
+        },
+    )
+
+    assert response.status_code == 422
+    mock_get_evaluation.assert_not_called()
