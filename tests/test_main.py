@@ -210,3 +210,93 @@ def test_personas_returns_registered_personas():
             "face_id": "f0ba4efe-7946-45de-9955-c04a04c367b9",
         },
     ]
+
+
+@patch("app.main.get_evaluation")
+def test_evaluate_endpoint_returns_evaluation_result(mock_get_evaluation):
+    mock_get_evaluation.return_value = {
+        "dimensions": {
+            "message_accuracy": "Accurate.",
+            "objection_handling": "Handled well.",
+            "rapport_building": "Warm.",
+            "compliance_adherence": "On-label.",
+        },
+        "overall_summary": "Solid performance.",
+        "improvement_recommendations": "Ask more open-ended questions.",
+    }
+    session_payload = {
+        "persona_id": "dr_sarah_chen",
+        "scenario": "Pharmaceutical sales call",
+        "objective": "Introduce a new treatment and handle objections",
+        "mood": "Skeptical, short on time",
+        "difficulty": "medium",
+    }
+
+    response = client.post(
+        "/evaluate",
+        json={
+            "messages": [{"role": "user", "content": "Hello doctor"}],
+            "session": session_payload,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == mock_get_evaluation.return_value
+    mock_get_evaluation.assert_called_once_with(
+        [{"role": "user", "content": "Hello doctor"}],
+        get_persona("dr_sarah_chen"),
+        session_payload,
+    )
+
+
+def test_evaluate_endpoint_rejects_unknown_persona_id():
+    response = client.post(
+        "/evaluate",
+        json={
+            "messages": [{"role": "user", "content": "Hi"}],
+            "session": {
+                "persona_id": "nonexistent_persona",
+                "scenario": "x",
+                "objective": "y",
+                "mood": "z",
+                "difficulty": "medium",
+            },
+        },
+    )
+
+    assert response.status_code == 400
+
+
+@patch("app.main.get_evaluation")
+def test_evaluate_endpoint_returns_503_when_evaluation_fails(mock_get_evaluation):
+    mock_get_evaluation.side_effect = Exception("boom: sensitive AWS detail")
+    session_payload = {
+        "persona_id": "dr_sarah_chen",
+        "scenario": "x",
+        "objective": "y",
+        "mood": "z",
+        "difficulty": "medium",
+    }
+
+    response = client.post(
+        "/evaluate",
+        json={
+            "messages": [{"role": "user", "content": "Hi"}],
+            "session": session_payload,
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "The evaluation service is temporarily unavailable. Please try again."
+    }
+    assert "sensitive AWS detail" not in response.text
+
+
+def test_evaluate_endpoint_requires_session():
+    response = client.post(
+        "/evaluate",
+        json={"messages": [{"role": "user", "content": "Hi"}]},
+    )
+
+    assert response.status_code == 422

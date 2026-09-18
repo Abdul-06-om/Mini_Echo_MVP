@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.avatar_simli import SimliAvatarProvider
 from app.bedrock import get_reply
+from app.evaluation import get_evaluation
 from app.personas import get_persona, list_personas
 from app.tts import list_voices, synthesize_speech
 
@@ -52,6 +53,11 @@ class AvatarSessionRequest(BaseModel):
 class TTSRequest(BaseModel):
     text: str
     voice_id: str | None = None
+
+
+class EvaluateRequest(BaseModel):
+    messages: list[ChatMessage]
+    session: RoleplaySessionRequest
 
 
 @app.get("/health")
@@ -145,3 +151,23 @@ def tts(request: TTSRequest):
             detail="Could not generate speech. Please try again.",
         )
     return Response(content=audio, media_type="audio/pcm")
+
+
+@app.post("/evaluate")
+def evaluate(request: EvaluateRequest):
+    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+
+    persona = get_persona(request.session.persona_id)
+    if persona is None:
+        raise HTTPException(status_code=400, detail="Unknown persona_id.")
+
+    try:
+        result = get_evaluation(messages, persona, request.session.model_dump())
+    except Exception:
+        logger.exception("Evaluation failed")
+        raise HTTPException(
+            status_code=503,
+            detail="The evaluation service is temporarily unavailable. Please try again.",
+        )
+
+    return result
