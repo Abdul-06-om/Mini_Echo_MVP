@@ -66,8 +66,9 @@ Routes:
 - `GET /` — serves `static/index.html`
 - `POST /chat` — body `{"messages": [...], "session": {...} | None}` (full
   conversation each call — backend is stateless), returns `{"reply": str}`.
-  `session` is optional — see "Roleplay Sessions" below. Calls
-  `app.bedrock.get_reply`.
+  `session` is optional — see "Roleplay Sessions" below — and may carry an
+  optional `reference_material` string (see "Therapeutic Area / Product
+  Knowledge" below). Calls `app.bedrock.get_reply`.
 - `POST /avatar/session` — body `{"face_id": str | None}`, calls
   `avatar_provider.create_session()` (currently `SimliAvatarProvider`),
   returns Simli's session token JSON as-is. `face_id` is optional and
@@ -232,7 +233,8 @@ document, not as "implemented but unconfirmed."
 
 A user can configure a structured roleplay before chatting: HCP persona,
 scenario, conversation objective, persona mood/behavior, and difficulty
-(easy/medium/hard). Once started, this becomes dynamic system-prompt
+(easy/medium/hard), plus optional pasted reference material (see
+"Therapeutic Area / Product Knowledge" below). Once started, this becomes dynamic system-prompt
 context for the *same* Bedrock conversation Text Chat and Live Voice
 already share — no new conversation pipeline, no backend persistence.
 
@@ -276,9 +278,13 @@ Starting a new roleplay (the "New Roleplay" button) resets both the
 session and the conversation array together — a persona swap mid-
 transcript wouldn't be a coherent conversation.
 
-**Extensibility, deliberately not built yet**: scoring, compliance
-detection, document/RAG grounding, and Admin persona management are all
-out of scope for this milestone. Because `objective`/`difficulty`/
+**Extensibility, deliberately not built at this milestone**: scoring,
+compliance detection, document/RAG grounding, and Admin persona
+management were all out of scope here. (Since then, qualitative scoring —
+"Performance Feedback" — and a narrow, pasted-text form of grounding —
+"Therapeutic Area / Product Knowledge" — have been added the way this
+paragraph predicted; compliance detection, RAG/document ingestion, and
+Admin remain out of scope.) Because `objective`/`difficulty`/
 `scenario` are structured fields (not buried in prompt text), and personas
 are already a separate typed registry from sessions, each of those can
 attach later — a new endpoint or a new parameter to `build_system_prompt`
@@ -306,14 +312,20 @@ evaluation of their conversation across four dimensions — message accuracy,
 objection handling, rapport building, and compliance adherence — plus an
 overall summary and specific improvement recommendations. No numeric scores
 anywhere (deliberately excluded per source-grounding rationale in the design
-spec below); everything is plain-text qualitative feedback.
+spec below); everything is plain-text qualitative feedback. (One narrow
+exception, only when Reference Material is supplied: the evaluator may
+quote figures that appear in that material — never scores, weights,
+thresholds, rankings, or invented numbers. See "Therapeutic Area / Product
+Knowledge" below.)
 
 **Backend** (`app/evaluation.py`): four pure functions called by the new
 `POST /evaluate` route:
 - `build_evaluation_prompt(persona, session) -> str`: composes a system
   prompt telling Bedrock to evaluate only the user's turns (not the persona's)
   against the configured scenario/objective, and to return exactly the six
-  required fields as a JSON object with no numeric content anywhere.
+  required fields as a JSON object with no numeric scoring anywhere (when
+  Reference Material is present, figures quoted from it are allowed — see
+  "Therapeutic Area / Product Knowledge" below).
 - `build_evaluation_request_body(messages, persona, session) -> dict`:
   constructs the Bedrock request body. **Critical detail**: appends a synthetic
   trailing `{"role": "user", "content": "Now produce the evaluation JSON
@@ -366,6 +378,98 @@ Simli avatar connects/animates/lip-syncs correctly; ElevenLabs audio plays
 correctly; audio-unlock works; the feedback panel is correctly hidden when
 "New Roleplay" is clicked, leaving the conversation fully reset; no session
 leakage or data corruption observed.
+
+## Therapeutic Area / Product Knowledge (Reference Material)
+
+A Roleplay Session can carry one optional free-text `reference_material`
+field — product / therapeutic-area facts the user pastes at setup — that
+grounds both the persona's replies and the Performance Feedback
+evaluation. It is client-held and sent whole on every `/chat` and
+`/evaluate` call, exactly like `scenario`/`objective`/`mood`. Nothing is
+stored, retrieved, indexed, uploaded, or parsed: **no RAG, embeddings,
+vector store, document ingestion, or Admin/content management**.
+
+**Source basis, and what this is not.** The Strategy doc's "Therapeutic
+Area Knowledge Base" (Core Feature #2; "Single therapeutic area knowledge
+base" in the V1.0 MVP list) is stated as an *outcome*, never a mechanism;
+RAG/vector stores/upload appear only under Echo Admin. This slice delivers
+the *effect* (a conversation and evaluation grounded in supplied facts),
+not the *asset* (a curated, persisted, MLR-approved, admin-managed
+knowledge base). The material is unverified and exactly as "approved" as
+the user makes it; "FDA label-bound responses" is not enforced. See
+`docs/superpowers/specs/2026-09-18-therapeutic-area-knowledge-design.md`
+(source-backed requirements S1–S6 vs. implementation decisions D1–D11) and
+its plan in `docs/superpowers/plans/`.
+
+**Contract** (`app/main.py`): `RoleplaySessionRequest.reference_material:
+str | None`, `Field(max_length=REFERENCE_MATERIAL_MAX_CHARS)` with the
+constant `8000` — a Mini ECHO guardrail, **not a source requirement**. The
+textarea's `maxlength="8000"` and hint text mirror it by hand (a build-free
+frontend has no shared constant — change all of them together). Over-cap
+or wrong-typed values are a 422 before any Bedrock call. Both `/chat` and
+`/evaluate` call `request.session.model_dump(exclude_none=True)`; this is
+load-bearing — without it the session dict handed to `get_reply`/
+`get_evaluation` gains `reference_material: None` and breaks the
+exact-dict assertions in `tests/test_main.py`.
+
+**Persona prompt** (`app/bedrock.py`): `REFERENCE_MATERIAL_FRAMING` plus a
+`<reference_material>…</reference_material>` block, inserted after the
+difficulty line and **before** `persona.safety_framing` (which must stay
+the last text of the prompt). The persona treats the material as ground
+truth without reciting or volunteering it (it plays the HCP, not the rep),
+pushes back on claims that contradict it, and asks for data on claims it
+doesn't cover instead of inventing clinical facts.
+
+**Evaluation prompt** (`app/evaluation.py`): its own
+`REFERENCE_MATERIAL_FRAMING`, inserted between the "Evaluate only the
+user's turns…" sentence and the JSON-format instructions. The evaluator
+judges `message_accuracy`/`compliance_adherence` only against the material:
+contradictions are called out, claims beyond it are "cannot be verified
+from the material" (not "wrong"), the persona's own statements are not
+evidence, and it does not vouch for the material. The no-numbers rule is
+narrowed **only when material is present**: the evaluator may quote or
+discuss figures that appear in the material, but must never introduce a
+number that isn't in it or use numbers to score, weight, rank, threshold,
+grade, or certify. This is prompt-only — `extract_evaluation` enforces
+nothing numeric. The two modules keep separate copies of the framing and
+the one-line normalization on purpose (different roles; `evaluation.py`
+still imports only `MODEL_ID`/`REGION` from `bedrock.py`).
+
+**Empty preserves behavior exactly.** Absent, `null`, `""`, and
+whitespace-only values yield prompts byte-identical to the pre-milestone
+ones. Verified by comparing the old (`6498290`) and new builders across
+every persona × difficulty × scenario × empty-value form (108 combinations,
+prompts and full request bodies), plus tests; the frontend also omits the
+key entirely when the trimmed textarea is empty, so request payloads are
+unchanged too.
+
+**Frontend** (`static/index.html`): a labeled textarea
+`#reference-material-input` and a live character counter
+`#reference-material-count` (browser `maxlength` truncates silently, so the
+counter makes the limit visible) sit in the setup form after Difficulty.
+The submit handler adds `reference_material` to `roleplaySession` only when
+the trimmed value is non-empty. The textarea keeps its text across "New
+Roleplay", like the other setup inputs. The change is CSS + additive markup
++ three small script additions; `avatar-src/`, `static/dist/`, and
+`static/stt-web-speech.js` are untouched and no `npm run build` was needed.
+
+**Known limitations (accepted):** 8,000 characters fits a key-facts sheet,
+not a full prescribing-information document; the material is resent with
+every turn (a little extra token cost/latency); pasted text goes to AWS
+Bedrock like the rest of the conversation; no indicator shows during a
+session that material is active; the text between the tags is not
+sanitized (the author is the sole consumer of their own session); the model
+may still ignore or misapply the material — prompt behavior is confirmed
+by manual QA, not guaranteed by tests. 19 automated tests cover the
+contract, cap, prompt content/ordering, and empty-value equality.
+
+**Manually verified in Chrome by the user** (2026-09-18): the user ran the
+manual QA checklist from the design spec (grounded persona behavior,
+evaluation content, blank-field behavior, Text Chat and Live Voice, all
+three personas, counter and cap, New Roleplay, layout, and the
+avatar/audio/feedback regression checks) and reported that it passed and
+everything works as expected. No per-item breakdown was recorded beyond
+that. This is a confirmed working feature, part of the stable baseline.
 
 ## ElevenLabs TTS integration (`app/tts.py`)
 
@@ -514,11 +618,18 @@ viewport (`100dvh`) dark cinematic layout:
   improvement recommendations, generated via a second Bedrock call. Get
   Feedback button shown during active roleplay, disabled until at least one
   message is exchanged. Results panel displays plain-text assessments with
-  zero numeric content. Manually verified end-to-end in Chrome by the user
+  no numeric scoring. Manually verified end-to-end in Chrome by the user
   (2026-09-18): feedback generates correctly for all three personas, shows
   no regressions in Text Chat/Live Voice/avatar/audio/audio-unlock, panel
   is correctly hidden on New Roleplay, and conversation remains fully usable
   after feedback is shown — see "Performance Feedback" above
+- Therapeutic Area / Product Knowledge (Reference Material): one optional,
+  user-pasted, per-session `reference_material` field (8,000-character
+  guardrail, live counter) that grounds both the active persona's replies
+  and the Performance Feedback evaluation. Stateless — no RAG, embeddings,
+  vector store, ingestion, persistence, or Admin. An empty/omitted field
+  preserves prior behavior byte-for-byte. Manually verified in Chrome by
+  the user (2026-09-18) — see "Therapeutic Area / Product Knowledge" above
 
 ## Known issues / open items
 
@@ -561,7 +672,8 @@ source venv/bin/activate
 pytest -v
 ```
 
-44 tests, all passing, all network-free (every external call — Bedrock, Simli,
+63 tests (44 before the Reference Material milestone, plus 19 added by it),
+all passing, all network-free (every external call — Bedrock, Simli,
 ElevenLabs — is mocked at the function boundary in `tests/test_main.py`, or
 avoided entirely via pure-function tests in `tests/test_bedrock.py` and
 `tests/test_evaluation.py`). No tests exist for the JavaScript (`doctor-avatar.js`,
@@ -659,6 +771,14 @@ installed; both `esbuild` and `simli-client` are declared in `package.json`.)
   assistant-final messages as a "prefill" for continuing that message;
   this trailing user turn makes the evaluator a fresh completion instead.
   Removing it reintroduces the role-confusion bug. Do not remove.
+- Reference Material invariants: (a) `persona.safety_framing` must remain
+  the last text of the persona system prompt — the reference block goes
+  before it; (b) `model_dump(exclude_none=True)` at both `/chat` and
+  `/evaluate` call sites in `app/main.py`; (c) an empty/whitespace/absent
+  `reference_material` must leave both prompts byte-identical to the
+  no-material version; (d) the evaluator's figure-quoting allowance applies
+  only when material is present and never permits invented numbers or
+  numeric scoring. See "Therapeutic Area / Product Knowledge" above.
 
 ## Completed and merged milestones (chronological)
 
@@ -704,11 +824,22 @@ read the relevant spec before touching any of these areas.
    defect (transcript ending in an `assistant`-role message being treated
    as a Bedrock "prefill") before it reached the user — see "Things that
    MUST NOT be broken" above for the fix that must not be reverted.
+8. **Therapeutic Area / Product Knowledge (Reference Material)** — one
+   optional, user-pasted, per-session `reference_material` field grounding
+   both the persona and the Performance Feedback evaluator; stateless, no
+   RAG/ingestion/persistence/Admin. See "Therapeutic Area / Product
+   Knowledge" above. Spec:
+   `docs/superpowers/specs/2026-09-18-therapeutic-area-knowledge-design.md`;
+   plan: `docs/superpowers/plans/2026-09-18-therapeutic-area-knowledge.md`.
+   Implemented in commits `75257f0`–`833e224`. Manually verified
+   2026-09-18.
 
-**Current `main`**: commit `d69a312`, pushed to `origin/main` (private
-GitHub repo `Abdul-06-om/Mini_Echo_MVP`), local and remote identical, working
-tree clean. **44 tests, all passing** (see "Tests and how to run them"
-above for the exact command and file breakdown).
+**Current `main`**: contains the Reference Material milestone (feature
+commits `75257f0`–`833e224`, its spec and plan, and this documentation
+update), pushed to `origin/main` (private GitHub repo
+`Abdul-06-om/Mini_Echo_MVP`), local and remote identical, working tree
+clean. **63 tests, all passing** (see "Tests and how to run them" above
+for the exact command and file breakdown).
 
 ## Source-document review: remaining Tier-1 gaps (as of 2026-09-18)
 
@@ -738,12 +869,15 @@ the private GitHub backup was created, and now live only at
 
 **Status map summary**: Every Tier-1 / "Core Platform Feature" / "V1.0
 MVP" item from the Strategy doc and the market-analysis doc's Tier 1 list
-is now complete **except two**:
+is now complete **except one, (B)** — (A), listed first below, has since
+been completed in its narrow form (milestone 8):
 
 - **(A) Therapeutic Area / Product Knowledge Base** — investigated in
-  depth on 2026-09-18 (see below). **This is the recommended next
-  candidate milestone — but no spec, plan, or code has been written for it
-  yet.**
+  depth on 2026-09-18 (see below) and **implemented in its narrow,
+  stateless form** (milestone 8: one optional user-pasted
+  `reference_material` field). The source's fuller vision — a curated,
+  persisted, admin-managed knowledge base — remains deliberately out of
+  scope.
 - **(B) Multi-Modal Practice's visual-aid/screen-share sub-feature**
   (Market analysis doc, Tier 1 item 3: *"Video presentation with screen
   sharing... Visual aid detailing practice"*) — not investigated in depth.
@@ -789,8 +923,13 @@ never the roleplay app itself:
 - Functionality pptx slide 24 (a *marketing differentiator* claim, not a
   requirement): *"Disease-state contextual retrieval"* — rests on top of
   the Admin-managed document store above, not a standalone capability.
-- Market analysis doc: the only content-ingestion-shaped item ("product
-  monographs and clinical data") sits under **Tier 2**, not Tier 1.
+- Both market documents: the only content-ingestion-shaped item ("product
+  monographs and clinical data") sits under **Tier 2** (the assessment
+  docx's "Product Launch Accelerator"; the market analysis PDF's
+  "Auto-Generation"), not Tier 1.
+- Strategy doc, "MVP Scope > Not Included (Future Releases)":
+  "Self-service content management" — the source itself defers
+  user-managed content infrastructure past V1.0.
 
 **Conclusion — smallest source-faithful implementation**: one new,
 optional, free-text field on the Roleplay Session (working name:
@@ -823,20 +962,19 @@ the persona's replies and the evaluation's `message_accuracy`/
 instead of judging plausibility with no reference), not something the
 current workflow is blocked without.
 
-**Status: analysis complete, nothing built.** No design spec, no
-implementation plan, no code exists for this milestone. The narrow
-implementation described above is this session's *recommendation*, not an
-approved spec — a fresh session should still walk through the normal
-brainstorm → clarifying questions → approaches → spec → spec review
-process before writing any code, the same way every prior milestone did.
+**Status: implemented and manually verified (2026-09-18).** The narrow
+implementation recommended above was approved, specced, planned, built,
+reviewed, and verified through the normal cycle — see "Therapeutic Area /
+Product Knowledge (Reference Material)" and milestone 8. The investigation
+above is kept as the evidence trail for it.
 
 ## Next planned feature
 
-**Pending, not started.** The candidate next milestone is the narrow,
-stateless Therapeutic Area / Product Knowledge grounding capability
-described immediately above. Read that whole section first — it contains
-the complete evidence trail, exact citations, and explicit exclusions.
-Nothing has been designed or built yet; do not assume the "one new
-free-text field" idea is approved as a spec — it was presented as a
-recommendation and the user had not yet approved proceeding with it when
-this document was last updated.
+**None currently planned or in progress.** Milestone 8 closed out the
+Tier-1 gap (A). The only remaining Tier-1 gap in the status map is **(B)**,
+the Multi-Modal Practice visual-aid/screen-share sub-feature. It is
+uninvestigated: feasibility against Simli's actual public API is
+unverified, and the source's own example ("AvatarVision") is attributed to
+a competitor's proprietary feature. Do not start it without a fresh,
+explicit decision, and begin with investigation before any design. The
+"Explicitly not promoted into Mini ECHO" list above still stands.
