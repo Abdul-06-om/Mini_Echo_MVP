@@ -245,8 +245,11 @@ registry to a database later only means rewriting the inside of
 Roleplay setup form's voice selector (still user-overridable); `face_id`
 is modeled and accepted by `POST /avatar/session` at the API level, but
 every persona currently points at the same verified Simli face — see
-"Known issues / open items" for why. Dr. Sarah Chen is still the only
-entry today, structurally no different from any future persona.
+"Known issues / open items" for why. Three personas are registered today — Dr. Sarah Chen (General
+Practitioner), Dr. Marcus Reyes (Cardiologist), and Dr. Priya Nair
+(Oncologist), all under `category="doctor"` — added by the same
+one-dict-entry mechanism this paragraph describes, with no change to
+`get_persona`/`list_personas`'s signatures or any caller.
 
 **Dynamic system prompt** (`app/bedrock.py`): `build_system_prompt(persona,
 session)` composes persona + scenario + objective + mood + a
@@ -425,14 +428,17 @@ viewport (`100dvh`) dark cinematic layout:
   Voice, manually verified end-to-end by the user (including multiple
   consecutive Live Voice turns inside an active roleplay) — see "Roleplay
   Sessions" above
-- Persona Library: function-based persona registry (`category`/`voice_id`/
-  `face_id` fields) and `GET /personas`, verified by pytest; the Roleplay
-  setup form defaulting its voice selector to the persona's `voice_id`
-  (still user-overridable) has been manually verified end-to-end in
-  Chrome by the user (2026-09-18), alongside confirming plain Text Chat,
-  Live Voice, the Simli avatar, ElevenLabs audio, and audio-unlock all
-  continue to work unchanged — see "Roleplay Sessions" above and "Next
-  planned feature" below
+- Persona Library: function-based persona registry with three personas now
+  registered — Dr. Sarah Chen (General Practitioner), Dr. Marcus Reyes
+  (Cardiologist), and Dr. Priya Nair (Oncologist) — all with
+  `category`/`voice_id`/`face_id` fields and exposed via `GET /personas`.
+  Manually verified end-to-end in Chrome by the user (2026-09-18): all
+  three personas appear and are selectable; persona names/specialties update
+  correctly; each gets its correct default ElevenLabs voice; manual voice
+  override still works; Text Chat works; Live Voice works across consecutive
+  turns; ElevenLabs audio works; the Simli avatar connects/animates/
+  lip-syncs correctly for all three; audio-unlock works; no session leakage
+  or regressions observed — see "Roleplay Sessions" above
 
 ## Known issues / open items
 
@@ -475,7 +481,7 @@ source venv/bin/activate
 pytest -v
 ```
 
-27 tests, all passing, all network-free (every external call — Bedrock, Simli,
+29 tests, all passing, all network-free (every external call — Bedrock, Simli,
 ElevenLabs — is mocked at the function boundary in `tests/test_main.py`, or
 avoided entirely via pure-function tests in `tests/test_bedrock.py`). No tests
 exist for the JavaScript (`doctor-avatar.js`, the inline script, or CSS) — this is
@@ -567,18 +573,21 @@ installed; both `esbuild` and `simli-client` are declared in `package.json`.)
 
 ## Next planned feature
 
-None currently planned. Persona Library (a function-based persona
-registry with `category`/`voice_id`/`face_id`, persona-default voice
-selection in the Roleplay setup form, and `face_id` modeled through
-`POST /avatar/session`) was the previously-planned next feature — see
-"Roleplay Sessions" above for the registry and
-`docs/superpowers/specs/2026-09-17-persona-library-design.md` for the
-full design rationale — and is now built and manually verified
-end-to-end by the user (2026-09-18): the backend by pytest, and the
-persona-default (still user-overridable) voice-selection behavior in the
-Roleplay setup form in a real browser, alongside confirming plain Text
-Chat, Live Voice, the Simli avatar, ElevenLabs audio, and audio-unlock
-all continue to work unchanged. Nothing is queued up after it. A
-follow-up milestone is expected once multiple real Simli face IDs are
-provisioned, to wire per-persona face switching and safe Simli
-reconnection.
+None currently planned. HCP Specialty Personas (Dr. Marcus Reyes,
+Cardiologist; Dr. Priya Nair, Oncologist) is now the completed milestone
+— the two new doctor personas have been added to the Persona Library
+registry alongside the existing Dr. Sarah Chen, each with correct
+ElevenLabs voice defaults and proper persona metadata. See
+`docs/superpowers/specs/2026-09-18-hcp-specialty-personas-design.md` for
+the design rationale. Manually verified end-to-end by the user
+(2026-09-18): all three personas appear and are selectable; persona
+names/specialties are correct; each gets its correct default voice; voice
+override works; Text Chat and Live Voice work across consecutive turns;
+ElevenLabs audio plays correctly; the Simli avatar connects/animates/
+lip-syncs correctly for all three; audio-unlock works; no session leakage
+or regressions observed. The shared Simli face intentionally remains the
+same across all three personas for this milestone per the approved spec's
+explicit scope — face-switching was deliberately not built. Nothing is
+queued up after it. A follow-up milestone is expected once multiple real
+Simli face IDs are provisioned, to wire per-persona face switching and
+safe Simli reconnection.
