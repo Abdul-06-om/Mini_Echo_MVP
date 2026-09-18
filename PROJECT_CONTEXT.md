@@ -299,6 +299,74 @@ of Roleplay Sessions continues to work unchanged. This is a confirmed
 working feature, not an unverified one — treat it as part of the stable
 baseline the same as the rest of this document.
 
+## Performance Feedback
+
+After a Roleplay Session completes, the user can request a qualitative
+evaluation of their conversation across four dimensions — message accuracy,
+objection handling, rapport building, and compliance adherence — plus an
+overall summary and specific improvement recommendations. No numeric scores
+anywhere (deliberately excluded per source-grounding rationale in the design
+spec below); everything is plain-text qualitative feedback.
+
+**Backend** (`app/evaluation.py`): four pure functions called by the new
+`POST /evaluate` route:
+- `build_evaluation_prompt(persona, session) -> str`: composes a system
+  prompt telling Bedrock to evaluate only the user's turns (not the persona's)
+  against the configured scenario/objective, and to return exactly the six
+  required fields as a JSON object with no numeric content anywhere.
+- `build_evaluation_request_body(messages, persona, session) -> dict`:
+  constructs the Bedrock request body. **Critical detail**: appends a synthetic
+  trailing `{"role": "user", "content": "Now produce the evaluation JSON
+  object described above."}` message to the transcript *before sending it to
+  Bedrock*. This exists because the Anthropic Messages API treats a request
+  ending in an `assistant`-role message as a "prefill" (continuing that
+  message) rather than a fresh turn — since the roleplay transcript naturally
+  ends in the persona's (assistant) reply, sending it unmodified would make
+  the evaluator continue the roleplay instead of returning the feedback JSON.
+  This is a non-obvious, easy-to-accidentally-break API constraint discovered
+  during this milestone's final review. **Do not remove this trailing message.**
+- `extract_evaluation(response_body) -> dict`: parses the JSON response,
+  including defensive handling for markdown fence formatting (`\`\`\`json
+  {...}\`\`\``). Returns only the six validated fields (whitelisting defense):
+  dimensions (with only the four specified keys), overall_summary, and
+  improvement_recommendations. Any extraneous field (even a stray numeric one)
+  is not passed through, preventing API surprises.
+- `get_evaluation(messages, persona, session) -> dict`: makes the real
+  Bedrock call and returns the extracted result.
+
+**Frontend route** (`POST /evaluate`): required `session` (unlike `/chat`'s
+optional session); returns 400 if persona_id is unknown (matching `/chat`'s
+pattern), 503 on any Bedrock/parsing failure.
+
+**Frontend UI** (`static/index.html`):
+- `#get-feedback-btn`: shown/hidden with the roleplay setup form, disabled
+  when no conversation yet or while a request is in flight. Reads `conversation`
+  and `roleplaySession` (both already in scope from existing chat code) and
+  POSTs to `/evaluate`.
+- `#feedback-panel`: a results panel showing the four dimension assessments,
+  overall summary, and recommendations as plain text. Toggled via
+  `style.display` (not the `hidden` attribute), matching the existing
+  inline-style pattern already load-bearing for `#chat`/`#chat-form`. On
+  failure, shows a single error message; `conversation` and `roleplaySession`
+  are never touched, so the user can immediately retry, keep chatting, or
+  start a new roleplay. The existing "New Roleplay" button hides this panel
+  on reset so stale feedback doesn't linger on screen.
+
+See `docs/superpowers/specs/2026-09-18-performance-feedback-design.md` for
+the full source-grounding rationale, why every dimension is included,
+what's deliberately excluded, and manual QA acceptance criteria.
+
+**Manually verified end-to-end in Chrome by the user** (2026-09-18):
+Performance Feedback works correctly — evaluation generates qualitative-only
+feedback with all six required fields for all three personas (Dr. Sarah Chen,
+Dr. Marcus Reyes, Dr. Priya Nair) — and shows no regressions: Text Chat
+works normally in the same session after feedback is shown; Live Voice works
+across multiple consecutive turns before and after using Get Feedback; the
+Simli avatar connects/animates/lip-syncs correctly; ElevenLabs audio plays
+correctly; audio-unlock works; the feedback panel is correctly hidden when
+"New Roleplay" is clicked, leaving the conversation fully reset; no session
+leakage or data corruption observed.
+
 ## ElevenLabs TTS integration (`app/tts.py`)
 
 - `synthesize_speech(text, voice_id=DEFAULT_VOICE_ID) -> bytes`: POSTs to
@@ -440,6 +508,17 @@ viewport (`100dvh`) dark cinematic layout:
   turns; ElevenLabs audio works; the Simli avatar connects/animates/
   lip-syncs correctly for all three; audio-unlock works; no session leakage
   or regressions observed — see "Roleplay Sessions" above
+- Performance Feedback: qualitative-only evaluation of completed roleplay
+  sessions across four dimensions (message accuracy, objection handling,
+  rapport building, compliance adherence) plus overall summary and
+  improvement recommendations, generated via a second Bedrock call. Get
+  Feedback button shown during active roleplay, disabled until at least one
+  message is exchanged. Results panel displays plain-text assessments with
+  zero numeric content. Manually verified end-to-end in Chrome by the user
+  (2026-09-18): feedback generates correctly for all three personas, shows
+  no regressions in Text Chat/Live Voice/avatar/audio/audio-unlock, panel
+  is correctly hidden on New Roleplay, and conversation remains fully usable
+  after feedback is shown — see "Performance Feedback" above
 
 ## Known issues / open items
 
@@ -482,13 +561,14 @@ source venv/bin/activate
 pytest -v
 ```
 
-29 tests, all passing, all network-free (every external call — Bedrock, Simli,
+44 tests, all passing, all network-free (every external call — Bedrock, Simli,
 ElevenLabs — is mocked at the function boundary in `tests/test_main.py`, or
-avoided entirely via pure-function tests in `tests/test_bedrock.py`). No tests
-exist for the JavaScript (`doctor-avatar.js`, the inline script, or CSS) — this is
-a deliberate, long-standing project convention (no JS test infra was ever added),
-not an oversight. Live/manual verification (curl for HTTP-level checks, the actual
-browser for WebRTC/audio/visual behavior) has been the substitute throughout.
+avoided entirely via pure-function tests in `tests/test_bedrock.py` and
+`tests/test_evaluation.py`). No tests exist for the JavaScript (`doctor-avatar.js`,
+the inline script, or CSS) — this is a deliberate, long-standing project convention
+(no JS test infra was ever added), not an oversight. Live/manual verification (curl
+for HTTP-level checks, the actual browser for WebRTC/audio/visual behavior) has been
+the substitute throughout.
 
 ## How to run the app locally
 
@@ -571,24 +651,27 @@ installed; both `esbuild` and `simli-client` are declared in `package.json`.)
   from `app/bedrock.py`
 - Never put a Simli or ElevenLabs (or any future provider's) API key in
   frontend code or expose it via an API response
+- The trailing synthetic user message in `app/evaluation.py`'s
+  `build_evaluation_request_body` — the final `{"role": "user",
+  "content": "Now produce the evaluation JSON object described above."}` —
+  is required to prevent Bedrock from continuing the roleplay instead of
+  returning the evaluation JSON. The Anthropic Messages API treats
+  assistant-final messages as a "prefill" for continuing that message;
+  this trailing user turn makes the evaluator a fresh completion instead.
+  Removing it reintroduces the role-confusion bug. Do not remove.
 
 ## Next planned feature
 
-None currently planned. HCP Specialty Personas (Dr. Marcus Reyes,
-Cardiologist; Dr. Priya Nair, Oncologist) is now the completed milestone
-— the two new doctor personas have been added to the Persona Library
-registry alongside the existing Dr. Sarah Chen, each with correct
-ElevenLabs voice defaults and proper persona metadata. See
-`docs/superpowers/specs/2026-09-18-hcp-specialty-personas-design.md` for
-the design rationale. Manually verified end-to-end by the user
-(2026-09-18): all three personas appear and are selectable; persona
-names/specialties are correct; each gets its correct default voice; voice
-override works; Text Chat and Live Voice work across consecutive turns;
-ElevenLabs audio plays correctly; the Simli avatar connects/animates/
-lip-syncs correctly for all three; audio-unlock works; no session leakage
-or regressions observed. The shared Simli face intentionally remains the
-same across all three personas for this milestone per the approved spec's
-explicit scope — face-switching was deliberately not built. Nothing is
-queued up after it. A follow-up milestone is expected once multiple real
-Simli face IDs are provisioned, to wire per-persona face switching and
-safe Simli reconnection.
+None currently planned. Performance Feedback is now the completed milestone
+— a qualitative-only, source-grounded evaluation module that generates
+assessments across four training dimensions (message accuracy, objection
+handling, rapport building, compliance adherence) plus overall summary and
+improvement recommendations for any completed Roleplay Session, with zero
+numeric content anywhere in the output. See
+`docs/superpowers/specs/2026-09-18-performance-feedback-design.md` for the
+full source-mapping rationale, what's included vs. deliberately excluded, and
+why. Manually verified end-to-end by the user (2026-09-18): feedback
+generation works for all three personas, no regressions in Text Chat/Live
+Voice/avatar/audio/audio-unlock, panel correctly hides on New Roleplay, and
+conversation remains fully usable after feedback is shown. Nothing is
+queued up after it.
