@@ -322,16 +322,18 @@
 
   #roleplay-setup {
     display: flex;
-    flex-direction: column;
-    gap: 1rem;
+    /* Row-wrap (not grid): the page toggles this form with style.display = 'flex'. */
+    flex-flow: row wrap;
+    gap: 0.7rem 1rem;
     background: var(--panel);
     border: 1px solid var(--panel-border);
     border-radius: var(--radius-md);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    padding: 1.5rem;
+    padding: 1.1rem 1.25rem;
     margin-bottom: 1rem;
   }
+  #roleplay-setup > * { flex: 1 1 100%; }
   .roleplay-setup-title {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 600;
@@ -344,6 +346,10 @@
     gap: 0.4rem;
     font-size: 0.78rem;
     color: var(--text-dim);
+  }
+  #roleplay-setup > .roleplay-field-half { flex: 1 1 calc(50% - 0.5rem); min-width: 0; }
+  @media (max-width: 560px) {
+    #roleplay-setup > .roleplay-field-half { flex-basis: 100%; }
   }
   .roleplay-field input[type="text"],
   .roleplay-field textarea,
@@ -368,7 +374,7 @@
   }
   .roleplay-field textarea {
     resize: vertical;
-    min-height: 6rem;
+    min-height: 4rem;
     line-height: 1.4;
   }
   .roleplay-field-hint {
@@ -380,6 +386,7 @@
     background: var(--bg-base-2);
     color: var(--text);
   }
+  #roleplay-setup > #start-roleplay-btn { flex: 0 0 auto; }
   #start-roleplay-btn {
     align-self: flex-start;
     margin-top: 0.3rem;
@@ -713,19 +720,19 @@
       </div>
       <form id="roleplay-setup">
         <h2 class="roleplay-setup-title">Start a Roleplay</h2>
-        <label class="roleplay-field">HCP Persona
+        <label class="roleplay-field roleplay-field-half">HCP Persona
           <span class="select-wrap"><select id="persona-select"></select></span>
         </label>
-        <label class="roleplay-field">Scenario
+        <label class="roleplay-field roleplay-field-half">Scenario
           <input id="scenario-input" type="text" placeholder="e.g. Pharmaceutical sales call" required>
         </label>
         <label class="roleplay-field">Conversation Objective
           <input id="objective-input" type="text" placeholder="e.g. Introduce a new treatment and handle objections" required>
         </label>
-        <label class="roleplay-field">Persona Mood / Behavior
+        <label class="roleplay-field roleplay-field-half">Persona Mood / Behavior
           <input id="mood-input" type="text" placeholder="e.g. Skeptical, short on time" required>
         </label>
-        <label class="roleplay-field">Difficulty
+        <label class="roleplay-field roleplay-field-half">Difficulty
           <span class="select-wrap">
             <select id="difficulty-select">
               <option value="easy">Easy</option>
@@ -736,7 +743,7 @@
         </label>
         <!-- maxlength and the hint's 8000 mirror REFERENCE_MATERIAL_MAX_CHARS in app/main.py -->
         <label class="roleplay-field">Reference Material (optional)
-          <textarea id="reference-material-input" rows="5" maxlength="8000" placeholder="Paste product or therapeutic-area facts to ground the conversation and the feedback — e.g. key clinical data, mechanism of action, approved messaging."></textarea>
+          <textarea id="reference-material-input" rows="3" maxlength="8000" placeholder="Paste product or therapeutic-area facts to ground the conversation and the feedback — e.g. key clinical data, mechanism of action, approved messaging."></textarea>
           <span class="roleplay-field-hint"><span id="reference-material-count">0</span> / 8000 characters. Mini ECHO does not verify this text — it is only as accurate as what you paste.</span>
         </label>
         <button type="submit" id="start-roleplay-btn">Start Roleplay</button>
@@ -802,6 +809,7 @@
     let voices = [];
     let personas = [];
     let roleplaySession = null;
+    let voiceUnavailableNoted = false;
 
     console.log('[page] MiniEchoAvatar bundle loaded:', typeof MiniEchoAvatar !== 'undefined');
 
@@ -955,6 +963,9 @@
       newRoleplayBtn.hidden = false;
       getFeedbackBtn.hidden = false;
       updateFeedbackButtonState();
+
+      // Simli sessions expire (idle / max length); start each roleplay on a live one.
+      avatar.ensureConnected();
     });
 
     newRoleplayBtn.addEventListener('click', () => {
@@ -1025,7 +1036,15 @@
         const data = await response.json();
         conversation.push({ role: 'assistant', content: data.reply });
         addMessage(data.reply, 'ai');
-        avatar.speak(data.reply, voiceSelect.value);
+        avatar.speak(data.reply, voiceSelect.value).then((spoke) => {
+          if (spoke) {
+            voiceUnavailableNoted = false;
+          } else if (!voiceUnavailableNoted) {
+            // Once per failure streak, so a quota outage doesn't spam the chat.
+            voiceUnavailableNoted = true;
+            addMessage('Voice playback is unavailable right now — replies will still appear as text.', 'error');
+          }
+        });
       } catch (error) {
         conversation.pop();
         addMessage('Something went wrong. Please try again.', 'error');
@@ -1148,11 +1167,18 @@
       voiceToggleBtn.disabled = true;
       voiceToggleBtn.title = 'Live voice mode requires a browser with SpeechRecognition support (e.g. desktop Chrome)';
     } else {
+      // 'error' counts as ready: replies still arrive as text, and the next
+      // reply's speak() reconnects the avatar — waiting for 'idle' would
+      // leave the voice loop stuck forever.
+      function readyToListen() {
+        return avatarPanel.dataset.state === 'idle' || avatarPanel.dataset.state === 'error';
+      }
+
       function startListeningIfStillIdle() {
         if (!voiceModeActive) return;
-        if (avatarPanel.dataset.state !== 'idle') return;
+        if (!readyToListen()) return;
         setTimeout(() => {
-          if (voiceModeActive && avatarPanel.dataset.state === 'idle') {
+          if (voiceModeActive && readyToListen()) {
             avatarPanel.dataset.state = 'listening';
             avatarStateBadge.textContent = 'listening';
             stt.start();

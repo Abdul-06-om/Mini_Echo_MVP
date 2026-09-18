@@ -34,9 +34,9 @@ var MiniEchoAvatar = (() => {
   ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // node_modules/livekit-client/dist/livekit-client.umd.js
+  // ../../../node_modules/livekit-client/dist/livekit-client.umd.js
   var require_livekit_client_umd = __commonJS({
-    "node_modules/livekit-client/dist/livekit-client.umd.js"(exports, module) {
+    "../../../node_modules/livekit-client/dist/livekit-client.umd.js"(exports, module) {
       !(function(e, t) {
         "object" == typeof exports && "undefined" != typeof module ? t(exports) : "function" == typeof define && define.amd ? define(["exports"], t) : t((e = "undefined" != typeof globalThis ? globalThis : e || self).LivekitClient = {});
       })(exports, (function(e) {
@@ -13542,9 +13542,9 @@ var MiniEchoAvatar = (() => {
     }
   });
 
-  // node_modules/simli-client/dist/Logger.js
+  // ../../../node_modules/simli-client/dist/Logger.js
   var require_Logger = __commonJS({
-    "node_modules/simli-client/dist/Logger.js"(exports) {
+    "../../../node_modules/simli-client/dist/Logger.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.Logger = exports.LogLevel = void 0;
@@ -13609,9 +13609,9 @@ var MiniEchoAvatar = (() => {
     }
   });
 
-  // node_modules/simli-client/dist/Signaling/WebSocketSignaling.js
+  // ../../../node_modules/simli-client/dist/Signaling/WebSocketSignaling.js
   var require_WebSocketSignaling = __commonJS({
-    "node_modules/simli-client/dist/Signaling/WebSocketSignaling.js"(exports) {
+    "../../../node_modules/simli-client/dist/Signaling/WebSocketSignaling.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.WebSocketSignaling = void 0;
@@ -13665,9 +13665,9 @@ var MiniEchoAvatar = (() => {
     }
   });
 
-  // node_modules/simli-client/dist/Transports/BaseTransport.js
+  // ../../../node_modules/simli-client/dist/Transports/BaseTransport.js
   var require_BaseTransport = __commonJS({
-    "node_modules/simli-client/dist/Transports/BaseTransport.js"(exports) {
+    "../../../node_modules/simli-client/dist/Transports/BaseTransport.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.handleMessage = handleMessage;
@@ -13726,9 +13726,9 @@ var MiniEchoAvatar = (() => {
     }
   });
 
-  // node_modules/simli-client/dist/Transports/LivekitTransport.js
+  // ../../../node_modules/simli-client/dist/Transports/LivekitTransport.js
   var require_LivekitTransport = __commonJS({
-    "node_modules/simli-client/dist/Transports/LivekitTransport.js"(exports) {
+    "../../../node_modules/simli-client/dist/Transports/LivekitTransport.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.LivekitTransport = void 0;
@@ -13851,9 +13851,9 @@ var MiniEchoAvatar = (() => {
     }
   });
 
-  // node_modules/simli-client/dist/Transports/P2PTransport.js
+  // ../../../node_modules/simli-client/dist/Transports/P2PTransport.js
   var require_P2PTransport = __commonJS({
-    "node_modules/simli-client/dist/Transports/P2PTransport.js"(exports) {
+    "../../../node_modules/simli-client/dist/Transports/P2PTransport.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.P2PTransport = void 0;
@@ -14018,9 +14018,9 @@ var MiniEchoAvatar = (() => {
     }
   });
 
-  // node_modules/simli-client/dist/Client.js
+  // ../../../node_modules/simli-client/dist/Client.js
   var require_Client = __commonJS({
-    "node_modules/simli-client/dist/Client.js"(exports) {
+    "../../../node_modules/simli-client/dist/Client.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.LogLevel = exports.Logger = exports.SimliClient = void 0;
@@ -14315,9 +14315,9 @@ var MiniEchoAvatar = (() => {
     }
   });
 
-  // node_modules/simli-client/dist/index.js
+  // ../../../node_modules/simli-client/dist/index.js
   var require_dist = __commonJS({
-    "node_modules/simli-client/dist/index.js"(exports) {
+    "../../../node_modules/simli-client/dist/index.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
       exports.LogLevel = exports.generateIceServers = exports.generateSimliSessionToken = exports.SimliClient = void 0;
@@ -14344,6 +14344,10 @@ var MiniEchoAvatar = (() => {
   });
   var import_simli_client = __toESM(require_dist());
   var LOG_PREFIX = "[DoctorAvatar]";
+  var CONNECT_TIMEOUT_MS = 25e3;
+  var SPEAK_START_TIMEOUT_MS = 1e4;
+  var SPEAK_END_MARGIN_MS = 8e3;
+  var PCM16_16KHZ_BYTES_PER_MS = 32;
   var DoctorAvatar = class {
     constructor({ videoEl, audioEl, panelEl, stateEl }) {
       this.videoEl = videoEl;
@@ -14353,6 +14357,10 @@ var MiniEchoAvatar = (() => {
       this.client = null;
       this.state = "connecting";
       this._audioUnlocked = false;
+      this._live = false;
+      this._connecting = null;
+      this._watchdog = null;
+      this._speakMs = 0;
       this._setState("connecting");
       this._setupAudioUnlock();
     }
@@ -14384,9 +14392,29 @@ var MiniEchoAvatar = (() => {
       document.addEventListener("keydown", unlock, { once: true });
       document.addEventListener("touchstart", unlock, { once: true });
     }
-    async connect() {
+    // Resolves true once a session is live, false if it could not be
+    // established (state is then "error"). Never throws. Concurrent callers
+    // share one in-flight attempt.
+    connect() {
+      if (!this._connecting) {
+        this._connecting = this._connect().finally(() => {
+          this._connecting = null;
+        });
+      }
+      return this._connecting;
+    }
+    // Cheap no-op while a live session exists; reconnects if it has ended.
+    ensureConnected() {
+      return this._live ? Promise.resolve(true) : this.connect();
+    }
+    async _connect() {
       console.log(LOG_PREFIX, "connect() starting");
+      this._clearWatchdog();
+      this._live = false;
+      await this._releaseClient();
       this._setState("connecting");
+      let client = null;
+      let timer = null;
       try {
         console.log(LOG_PREFIX, "requesting session token from /avatar/session");
         const response = await fetch("/avatar/session", { method: "POST" });
@@ -14397,7 +14425,7 @@ var MiniEchoAvatar = (() => {
         }
         const { session_token } = await response.json();
         console.log(LOG_PREFIX, "got session token, length:", session_token.length);
-        this.client = new import_simli_client.SimliClient(
+        client = new import_simli_client.SimliClient(
           session_token,
           this.videoEl,
           this.audioEl,
@@ -14405,81 +14433,159 @@ var MiniEchoAvatar = (() => {
           import_simli_client.LogLevel.DEBUG,
           "livekit"
         );
+        this.client = client;
         console.log(LOG_PREFIX, "SimliClient constructed");
-        this.client.on("start", () => {
+        const current = (handler) => (...args) => {
+          if (this.client === client) handler(...args);
+        };
+        client.on("start", current(() => {
           console.log(LOG_PREFIX, "event: start (first video frame received)");
+          this._live = true;
           this._setState("idle");
-        });
-        this.client.on("stop", () => {
-          console.log(LOG_PREFIX, "event: stop");
-        });
-        this.client.on("speaking", () => {
+        }));
+        client.on("stop", current(() => {
+          console.log(LOG_PREFIX, "event: stop \u2014 session ended, will reconnect on next use");
+          this._live = false;
+          this._clearWatchdog();
+          if (this.state === "speaking" || this.state === "thinking") this._setState("idle");
+        }));
+        client.on("speaking", current(() => {
           console.log(LOG_PREFIX, "event: speaking");
           this._setState("speaking");
-        });
-        this.client.on("silent", () => {
+          this._armWatchdog(this._speakMs + SPEAK_END_MARGIN_MS);
+        }));
+        client.on("silent", current(() => {
           console.log(LOG_PREFIX, "event: silent");
+          this._clearWatchdog();
           this._setState("idle");
-        });
-        this.client.on("error", (detail) => {
+        }));
+        client.on("error", current((detail) => {
           console.error(LOG_PREFIX, "event: error \u2014", detail);
+          this._live = false;
+          this._clearWatchdog();
           this._setState("error");
-        });
-        this.client.on("startup_error", (detail) => {
+        }));
+        client.on("startup_error", current((detail) => {
           console.error(LOG_PREFIX, "event: startup_error \u2014", detail);
+          this._live = false;
           this._setState("error");
-        });
-        this.client.on("ack", () => {
+        }));
+        client.on("ack", () => {
           console.log(LOG_PREFIX, "event: ack");
         });
-        this.client.on("connection_info", (info) => {
+        client.on("connection_info", (info) => {
           console.log(LOG_PREFIX, "event: connection_info \u2014", info);
         });
-        this.client.on("video_info", (info) => {
+        client.on("video_info", (info) => {
           console.log(LOG_PREFIX, "event: video_info \u2014", info);
         });
-        this.client.on("unknown", (message) => {
+        client.on("unknown", (message) => {
           console.log(LOG_PREFIX, "event: unknown \u2014", message);
         });
         console.log(LOG_PREFIX, "calling client.start() \u2014 waiting for first video frame");
-        await this.client.start();
+        const timeout = new Promise((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("timed out waiting for the avatar to connect")),
+            CONNECT_TIMEOUT_MS
+          );
+        });
+        await Promise.race([client.start(), timeout]);
         console.log(LOG_PREFIX, "client.start() resolved \u2014 connected");
+        this._live = true;
         this._setState("idle");
+        return true;
       } catch (error) {
         console.error(LOG_PREFIX, "connect() failed:", error);
+        this._live = false;
+        if (client && this.client === client) {
+          this.client = null;
+          this._stopClient(client);
+        }
         this._setState("error");
+        return false;
+      } finally {
+        clearTimeout(timer);
       }
     }
     think() {
       console.log(LOG_PREFIX, "think() \u2014 state -> thinking");
       this._setState("thinking");
     }
+    // Resolves true once the reply audio has been handed to Simli, false if it
+    // could not be played (TTS failure or no avatar session). Never throws, and
+    // always leaves the state at "thinking"/"speaking" (in flight) or back at
+    // "idle" / "error" — never stuck.
     async speak(text, voiceId) {
-      console.log(LOG_PREFIX, "speak() called, client connected:", !!this.client, "text length:", text.length);
-      if (!this.client) {
-        console.warn(LOG_PREFIX, "speak() called but no client connected yet \u2014 skipping");
-        return;
-      }
+      console.log(LOG_PREFIX, "speak() called, live:", this._live, "text length:", text.length);
       this._setState("thinking");
       try {
-        console.log(LOG_PREFIX, "requesting TTS audio from /tts, voiceId:", voiceId || "(default)");
-        const response = await fetch("/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(voiceId ? { text, voice_id: voiceId } : { text })
-        });
-        console.log(LOG_PREFIX, "/tts HTTP status:", response.status);
-        if (!response.ok) {
-          const errorBody = await response.text();
-          throw new Error("TTS request failed: " + errorBody);
-        }
-        const buffer = await response.arrayBuffer();
-        console.log(LOG_PREFIX, "got audio bytes:", buffer.byteLength, "(", (buffer.byteLength / 32e3).toFixed(2), "sec of PCM16 16kHz)");
-        this.client.sendAudioData(new Uint8Array(buffer));
+        const [live, audio] = await Promise.all([
+          this.ensureConnected(),
+          this._fetchSpeech(text, voiceId)
+        ]);
+        if (!live) throw new Error("avatar session unavailable");
+        this._setState("thinking");
+        this._speakMs = audio.byteLength / PCM16_16KHZ_BYTES_PER_MS;
+        this.client.sendAudioData(audio);
+        this._armWatchdog(SPEAK_START_TIMEOUT_MS);
         console.log(LOG_PREFIX, "audio data sent to Simli client");
+        return true;
       } catch (error) {
         console.error(LOG_PREFIX, "speak() failed:", error);
-        this._setState("error");
+        this._clearWatchdog();
+        this._setState(this._live ? "idle" : "error");
+        return false;
+      }
+    }
+    async _fetchSpeech(text, voiceId) {
+      console.log(LOG_PREFIX, "requesting TTS audio from /tts, voiceId:", voiceId || "(default)");
+      const response = await fetch("/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(voiceId ? { text, voice_id: voiceId } : { text })
+      });
+      console.log(LOG_PREFIX, "/tts HTTP status:", response.status);
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error("TTS request failed: " + errorBody);
+      }
+      const buffer = await response.arrayBuffer();
+      console.log(LOG_PREFIX, "got audio bytes:", buffer.byteLength, "(", (buffer.byteLength / 32e3).toFixed(2), "sec of PCM16 16kHz)");
+      return new Uint8Array(buffer);
+    }
+    // If Simli never confirms "speaking" / "silent" (e.g. the session died
+    // without an event), stop waiting: go idle and reconnect on next use.
+    _armWatchdog(ms) {
+      this._clearWatchdog();
+      this._watchdog = setTimeout(() => {
+        this._watchdog = null;
+        console.warn(LOG_PREFIX, "watchdog: no response from Simli \u2014 returning to idle, will reconnect on next use");
+        this._live = false;
+        if (this.state === "speaking" || this.state === "thinking") this._setState("idle");
+      }, ms);
+    }
+    _clearWatchdog() {
+      if (this._watchdog) {
+        clearTimeout(this._watchdog);
+        this._watchdog = null;
+      }
+    }
+    // Wait (bounded) for the previous client to release the shared video/audio
+    // elements before a new one attaches to them.
+    async _releaseClient() {
+      const previous = this.client;
+      this.client = null;
+      if (!previous) return;
+      await Promise.race([
+        this._stopClient(previous),
+        new Promise((resolve) => setTimeout(resolve, 3e3))
+      ]);
+    }
+    async _stopClient(client) {
+      try {
+        await client.stop();
+      } catch (error) {
+        console.warn(LOG_PREFIX, "stopping previous client failed (ignored):", error);
       }
     }
     _setState(state) {
