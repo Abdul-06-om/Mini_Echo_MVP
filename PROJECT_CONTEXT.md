@@ -660,18 +660,183 @@ installed; both `esbuild` and `simli-client` are declared in `package.json`.)
   this trailing user turn makes the evaluator a fresh completion instead.
   Removing it reintroduces the role-confusion bug. Do not remove.
 
+## Completed and merged milestones (chronological)
+
+Each of these was implemented via the full brainstorm → spec → spec review
+→ implementation plan → plan review → subagent-driven implementation →
+per-task review → final whole-branch review → manual browser QA →
+merge-to-`main` → push-to-`origin` cycle. Every spec/plan lives in
+`docs/superpowers/specs/` / `docs/superpowers/plans/` and is still on disk —
+read the relevant spec before touching any of these areas.
+
+1. **Original 7-step text-only MVP** (`PROJECT.md`) — one fixed GP persona,
+   Bedrock chat, session-only memory, disclaimer, error handling. Complete
+   before this document's later milestones began; `PROJECT.md`'s own
+   Status section already says *"All 7 MVP steps complete."*
+2. **Simli live avatar + ElevenLabs TTS** — video avatar and speech,
+   integrated into the same chat pipeline. See "Simli live avatar
+   integration" / "ElevenLabs TTS integration" above.
+3. **Live Voice Conversation** — browser STT, same `/chat` pipeline,
+   `listening → thinking → speaking → listening` loop. Spec:
+   `docs/superpowers/specs/2026-09-17-live-voice-conversation-design.md`.
+   Manually verified 2026-09-17.
+4. **Roleplay Sessions** — structured persona/scenario/objective/mood/
+   difficulty, dynamic system prompt, shared by Text Chat and Live Voice.
+   Spec: `docs/superpowers/specs/2026-09-17-roleplay-sessions-design.md`.
+   Manually verified 2026-09-17.
+5. **Persona Library** — function-based registry (`get_persona`/
+   `list_personas`), `category`/`voice_id`/`face_id` fields, persona-default
+   voice selection. Spec:
+   `docs/superpowers/specs/2026-09-17-persona-library-design.md`. Manually
+   verified 2026-09-18.
+6. **HCP Specialty Personas** — added Dr. Marcus Reyes (Cardiologist) and
+   Dr. Priya Nair (Oncologist) to the registry, sourced directly from the
+   market analysis document's *"Specialty Controls: Configurable by HCP
+   specialty (Cardio, Onco)"* requirement; no new taxonomy, same shared
+   Simli face. Spec:
+   `docs/superpowers/specs/2026-09-18-hcp-specialty-personas-design.md`.
+   Manually verified 2026-09-18.
+7. **Performance Feedback / Scoring** — stateless, qualitative-only
+   post-session evaluation (`app/evaluation.py`, `POST /evaluate`, "Get
+   Feedback" UI). See "Performance Feedback" above. Spec:
+   `docs/superpowers/specs/2026-09-18-performance-feedback-design.md`.
+   Manually verified 2026-09-18. A final whole-branch review caught a real
+   defect (transcript ending in an `assistant`-role message being treated
+   as a Bedrock "prefill") before it reached the user — see "Things that
+   MUST NOT be broken" above for the fix that must not be reverted.
+
+**Current `main`**: commit `d69a312`, pushed to `origin/main` (private
+GitHub repo `Abdul-06-om/Mini_Echo_MVP`), local and remote identical, working
+tree clean. **44 tests, all passing** (see "Tests and how to run them"
+above for the exact command and file breakdown).
+
+## Source-document review: remaining Tier-1 gaps (as of 2026-09-18)
+
+**Original source documents** (business-confidential Proxa ECHO planning
+material — the full, "bigger project" `PROJECT.md` explicitly says Mini
+ECHO is a simplified version of). These are **not in this git repo** —
+they were deliberately moved out during an earlier security review, before
+the private GitHub backup was created, and now live only at
+`/Users/abdulrahman/Desktop/file for the project/` on this machine:
+- `Proxa Roleplay and AI Tutor.pdf` (8 pages — high-level solution overview)
+- `pharma_ai_roleplay_market_analysis_Draft.pdf` (19 pages — competitive/
+  feature-tier analysis; contains the "Tier 1 / Tier 2 / Tier 3" framing
+  cited throughout this project's specs)
+- `Proxa Echo Overview - revised with mobile - Revisions.pdf` (29 pages —
+  literal app walkthrough screenshots)
+- `AI Roleplay Product Strategy Document - Draft v1.docx` (the MVP/V1.0
+  feature spec — source of the "Core Platform Features" numbered list and
+  the "MVP Scope > Included in V1.0" list cited repeatedly in this project)
+- `Roleplay and Tutor market assessment for Proxa Labs Solution.docx`
+  (competitive analysis; source of the "TIER 1/2/3" feature lists)
+- `Echo Platform Functionality Document copy.pptx` (26 slides — detailed
+  functional requirements, including the Echo Admin web app spec)
+- `AI Product Offering Idea - DIGITAL TWINS ROLEPLAY.png` — confirmed
+  **irrelevant**, an unrelated HR/knowledge-transfer product idea, not
+  connected to healthcare roleplay at all. Already ruled out once; don't
+  re-investigate it.
+
+**Status map summary**: Every Tier-1 / "Core Platform Feature" / "V1.0
+MVP" item from the Strategy doc and the market-analysis doc's Tier 1 list
+is now complete **except two**:
+
+- **(A) Therapeutic Area / Product Knowledge Base** — investigated in
+  depth on 2026-09-18 (see below). **This is the recommended next
+  candidate milestone — but no spec, plan, or code has been written for it
+  yet.**
+- **(B) Multi-Modal Practice's visual-aid/screen-share sub-feature**
+  (Market analysis doc, Tier 1 item 3: *"Video presentation with screen
+  sharing... Visual aid detailing practice"*) — not investigated in depth.
+  Feasibility against Simli's actual public API is unverified; the
+  source's own example of this ("AvatarVision," avatars that "see" shared
+  materials) is explicitly attributed to a *competitor's* proprietary
+  feature in the market analysis doc, not confirmed available here.
+
+Explicitly **not** promoted into Mini ECHO, and should not be
+reconsidered without a fresh, explicit decision: session
+history/cross-session persistence (blocked by the stateless-backend
+decision in "Important architectural decisions" above), a browsable/preset
+scenario library (coupled to Admin),
+the heavy enterprise compliance/MLR/audit engine, Enterprise-Grade
+Security (SSO/MFA/HIPAA), certification, AI Tutor, LMS/CRM integration,
+manager dashboards, multi-stakeholder simultaneous scenes, and "Digital
+Twin Patient" mode (explicitly labeled "(future expansion)" in the market
+analysis doc).
+
+### Item A investigation: Therapeutic Area / Product Knowledge Base — full findings
+
+**Exact requirement, cited verbatim** (Strategy doc, Core Platform Feature
+#2): *"Deep domain expertise powers realistic medical sales conversations
+across disease states, products, and competitive landscapes. Includes:
+General medical knowledge (disease states, treatment protocols,
+reimbursement); Product-specific content (clinical data, MOA, prescribing
+information); Competitive intelligence and positioning; Payer coverage and
+patient qualification criteria; Compliance guardrails and approved
+messaging."* Also named directly in that document's own "MVP Scope >
+Included in V1.0" list: *"Single therapeutic area knowledge base."* The
+requirement is stated as an **outcome** (conversations should reflect deep
+domain expertise), never as a technical mechanism.
+
+**RAG/embeddings/vector search/document ingestion are NOT a Tier-1
+requirement** — every mention of these across all four documents is
+explicitly scoped to the Echo **Admin** web app (the back-office system),
+never the roleplay app itself:
+- Functionality pptx slide 19, "Echo Admin — Details," under "Document
+  Management (expanded)": *"TA → document mapping (for RAG retrieval)"*
+- Functionality pptx slide 20, "Echo Admin — Expanded," under "Document
+  Management": *"Secure upload to isolated vector stores. Auto-tagging via
+  ML."*
+- Functionality pptx slide 24 (a *marketing differentiator* claim, not a
+  requirement): *"Disease-state contextual retrieval"* — rests on top of
+  the Admin-managed document store above, not a standalone capability.
+- Market analysis doc: the only content-ingestion-shaped item ("product
+  monographs and clinical data") sits under **Tier 2**, not Tier 1.
+
+**Conclusion — smallest source-faithful implementation**: one new,
+optional, free-text field on the Roleplay Session (working name:
+"reference material" or "product context"), following the *exact* existing
+pattern `scenario`/`objective`/`mood` already use — client-held, sent whole
+per `/chat` and `/evaluate` call, zero persistence — injected into
+`build_system_prompt` (and available to `build_evaluation_prompt`, since
+both already receive the same session dict) as ground-truth context for
+that one conversation. This is a deliberately narrow slice of the source's
+full vision (one user-supplied blob per session, not a persisted,
+admin-curated library spanning all five content types cited above) — but
+it's the part of the requirement that fits Mini ECHO's existing
+architecture without contradicting any prior decision.
+
+**What must NOT be built for this milestone** (all explicitly tied to
+Echo Admin in the source material, already excluded from every prior
+milestone in this project):
+- RAG, embeddings, or vector search of any kind
+- Any document upload, parsing, or ingestion pipeline
+- A persisted, cross-session content library or database of any kind
+- Admin-managed content tagging, versioning, or approval workflows
+- Real competitive-intelligence data feeds or payer/formulary data
+  integration
+
+**Dependency check**: this capability is **not a prerequisite** for item
+B or for anything already built — it's a standalone enhancement to the
+existing Roleplay Sessions + Performance Feedback workflow (giving both
+the persona's replies and the evaluation's `message_accuracy`/
+`compliance_adherence` dimensions something concrete to ground against,
+instead of judging plausibility with no reference), not something the
+current workflow is blocked without.
+
+**Status: analysis complete, nothing built.** No design spec, no
+implementation plan, no code exists for this milestone. The narrow
+implementation described above is this session's *recommendation*, not an
+approved spec — a fresh session should still walk through the normal
+brainstorm → clarifying questions → approaches → spec → spec review
+process before writing any code, the same way every prior milestone did.
+
 ## Next planned feature
 
-None currently planned. Performance Feedback is now the completed milestone
-— a qualitative-only, source-grounded evaluation module that generates
-assessments across four training dimensions (message accuracy, objection
-handling, rapport building, compliance adherence) plus overall summary and
-improvement recommendations for any completed Roleplay Session, with zero
-numeric content anywhere in the output. See
-`docs/superpowers/specs/2026-09-18-performance-feedback-design.md` for the
-full source-mapping rationale, what's included vs. deliberately excluded, and
-why. Manually verified end-to-end by the user (2026-09-18): feedback
-generation works for all three personas, no regressions in Text Chat/Live
-Voice/avatar/audio/audio-unlock, panel correctly hides on New Roleplay, and
-conversation remains fully usable after feedback is shown. Nothing is
-queued up after it.
+**Pending, not started.** The candidate next milestone is the narrow,
+stateless Therapeutic Area / Product Knowledge grounding capability
+described immediately above. Read that whole section first — it contains
+the complete evidence trail, exact citations, and explicit exclusions.
+Nothing has been designed or built yet; do not assume the "one new
+free-text field" idea is approved as a spec — it was presented as a
+recommendation and the user had not yet approved proceeding with it when
+this document was last updated.
