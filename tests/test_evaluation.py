@@ -61,6 +61,58 @@ def test_build_evaluation_request_body_has_correct_shape():
     assert body["messages"][-1]["role"] == "user"
 
 
+MATERIAL = "Zorivex achieved a 32% response rate in its pivotal trial."
+
+
+def test_build_evaluation_prompt_includes_reference_material():
+    prompt = build_evaluation_prompt(
+        TEST_PERSONA, {**TEST_SESSION, "reference_material": MATERIAL}
+    )
+
+    assert f"<reference_material>\n{MATERIAL}\n</reference_material>" in prompt
+    assert "cannot be verified" in prompt
+    assert "never introduce a number" in prompt
+    assert "score, weight, rank, threshold, grade or certify" in prompt
+    assert prompt.index("<reference_material>") < prompt.index(
+        "Respond with a single JSON object"
+    )
+
+
+def test_build_evaluation_prompt_trims_reference_material():
+    prompt = build_evaluation_prompt(
+        TEST_PERSONA, {**TEST_SESSION, "reference_material": f"  \n{MATERIAL}\n  "}
+    )
+
+    assert f"<reference_material>\n{MATERIAL}\n</reference_material>" in prompt
+
+
+@pytest.mark.parametrize("empty", [None, "", "   \n\t "])
+def test_build_evaluation_prompt_ignores_empty_reference_material(empty):
+    baseline = build_evaluation_prompt(TEST_PERSONA, TEST_SESSION)
+
+    prompt = build_evaluation_prompt(
+        TEST_PERSONA, {**TEST_SESSION, "reference_material": empty}
+    )
+
+    assert prompt == baseline
+    assert "reference_material" not in baseline
+    assert "Reference material" not in baseline
+
+
+def test_build_evaluation_request_body_keeps_trailing_user_message_with_material():
+    body = build_evaluation_request_body(
+        [{"role": "assistant", "content": "Hi"}],
+        TEST_PERSONA,
+        {**TEST_SESSION, "reference_material": MATERIAL},
+    )
+
+    assert MATERIAL in body["system"]
+    assert body["messages"][-1] == {
+        "role": "user",
+        "content": "Now produce the evaluation JSON object described above.",
+    }
+
+
 def test_extract_evaluation_parses_valid_json():
     response_body = _response_with_text(json.dumps(VALID_EVALUATION))
 
