@@ -7,6 +7,11 @@ software/AI engineering) that has grown past its original 7-step text-only MVP i
 live-avatar product with real third-party integrations. Treat every claim below as
 verified against the code as of the last commit on `main`.
 
+**Status: Mini ECHO v1 is Demo Ready** (closed out 2026-09-19). The core
+feature set is complete and the end-to-end demo flow has been hardened and
+manually verified by the user in Chrome — see "Demo Readiness (Mini ECHO
+v1)" below. No further milestone is planned or in progress.
+
 ## What this is
 
 A local web app: the user chats with an AI doctor persona — Dr. Sarah Chen
@@ -104,7 +109,13 @@ including the avatar photo and the built JS bundle.
   real diagnoses, told to redirect real emergencies to real emergency
   services) — used whenever no roleplay session is active. When one is,
   `build_system_prompt(persona, session)` composes a dynamic prompt instead —
-  see "Roleplay Sessions" below.
+  see "Roleplay Sessions" below. In a session, the prompt also carries
+  `SPOKEN_REPLY_INSTRUCTION` (Demo Readiness): replies are spoken aloud
+  live, so the persona is told to stay brief — usually one to three
+  sentences, well under 80 words, no lists/headings — unless the user asks
+  it to elaborate. It sits after the difficulty line and before the
+  reference block and `safety_framing`; `DEFAULT_SYSTEM_PROMPT` and the
+  evaluation prompt are unchanged.
 - `build_request_body(messages, persona=None, session=None) -> dict` /
   `extract_reply_text(response_body) -> dict` are pure functions, unit tested
   without any network call.
@@ -133,26 +144,39 @@ avatar, no image/likeness was uploaded.
 per-request face override, defaulting to `FACE_ID` when omitted.
 `POST /avatar/session` exposes this as an optional `face_id` field on its
 request body. No caller sends a non-default value yet — the frontend's
-`avatar.connect()` still fires once at page load, before any persona is
-selected, exactly as before this field existed.
+`avatar.connect()` still fires at page load, before any persona is
+selected (and again on demand when the session has ended — see "Session
+lifetime / recovery" below), exactly as before this field existed.
 
 **Frontend** (`avatar-src/doctor-avatar.js`, exported as `DoctorAvatar`, exposed on
 `window.MiniEchoAvatar.DoctorAvatar` via the esbuild IIFE bundle):
 - Constructor takes `{ videoEl, audioEl, panelEl, stateEl }` — real `<video>` and
   `<audio>` DOM elements, plus any two elements for state (`panelEl.dataset.state`
   is set; `stateEl.textContent` is set to the raw state word).
-- `connect()`: fetches `/avatar/session`, constructs a `SimliClient` from the
-  `simli-client` npm package using **`transport_mode: "livekit"`** (not `"p2p"` —
-  p2p requires ICE servers we don't fetch; livekit mode needs none), registers
-  listeners for every `SimliClientEvents` key (`start`, `stop`, `speaking`,
-  `silent`, `error`, `startup_error`, `ack`, `connection_info`, `video_info`,
-  `unknown`), then calls `client.start()`.
+- `connect()`: resolves `true` once a session is live, `false` if it could
+  not be established (state → `"error"`); it never throws, and concurrent
+  callers share one in-flight attempt. Fetches `/avatar/session`,
+  constructs a `SimliClient` from the `simli-client` npm package using
+  **`transport_mode: "livekit"`** (not `"p2p"` — p2p requires ICE servers we
+  don't fetch; livekit mode needs none), registers listeners for every
+  `SimliClientEvents` key (`start`, `stop`, `speaking`, `silent`, `error`,
+  `startup_error`, `ack`, `connection_info`, `video_info`, `unknown`), then
+  calls `client.start()` bounded by a 25 s timeout (the SDK retries
+  `start()` internally, so it could otherwise leave the badge on
+  "connecting" forever). Any previously held client is stopped first, and
+  events from a replaced client are ignored (a `current()` identity guard),
+  so a late `stop`/`error` from the old session cannot clobber the new one.
 - `think()`: sets state to `"thinking"` (called by the page right before sending
   the user's message to `/chat`).
-- `speak(text, voiceId)`: fetches `/tts` for that exact text/voice, then calls
+- `speak(text, voiceId)`: resolves `true` once the reply audio has been
+  handed to Simli, `false` if it could not be played; it never throws. It
+  fetches `/tts` for that exact text/voice (in parallel with
+  `ensureConnected()`), then calls
   `client.sendAudioData(new Uint8Array(arrayBuffer))` — the **entire** PCM16 buffer
   in one call, no chunking needed (confirmed by reading `simli-client`'s actual
   source; `sendAudioData` just forwards the whole array over an open WebSocket).
+  A TTS failure with a live Simli session returns the state to `"idle"` (not a
+  sticky `"error"`); no usable session leaves it at `"error"`.
 - States actually emitted by this component, and only these five:
   `"connecting"`, `"idle"`, `"thinking"`, `"speaking"`, `"error"`. A sixth state,
   `"listening"`, is added by the Live Voice Conversation feature (see below) but
@@ -161,6 +185,20 @@ selected, exactly as before this field existed.
 - `speaking`/`silent` (SDK events, driven by Simli's own server-side detection of
   the audio we send it) drive the speaking/idle transitions — not a timer, not a
   guess.
+- **Session lifetime / recovery** (Demo Readiness): Simli itself ends a
+  session after `maxIdleTime` (180 s) or `maxSessionLength` (600 s) — set in
+  `app/avatar_simli.py` — by emitting `stop` or `error`. The component tracks
+  a `_live` flag from `start`/`stop`/`error`. `ensureConnected()` is a no-op
+  while live and otherwise calls `connect()`; the page calls it at Start
+  Roleplay and every `speak()` calls it, so an expired session costs one
+  reconnect instead of a dead avatar. A watchdog covers a session that dies
+  without an event: after audio is sent, if Simli never reports `speaking`
+  (10 s) or `silent` (audio length + 8 s), the state returns to `"idle"` and
+  the session is marked dead so the next use reconnects. A reconnect passes
+  through `"idle"`, so `speak()` re-asserts `"thinking"` before audio plays —
+  otherwise Live Voice could start listening and capture the persona's own
+  voice. No new avatar states were added; the timeout/watchdog values are
+  constants at the top of `doctor-avatar.js`.
 
 ## Live Voice Conversation integration
 
@@ -192,7 +230,7 @@ set directly on `#avatar-panel`'s `data-state` (and mirrored onto
 was not modified and has no awareness voice mode exists.
 
 **Turn-taking loop**: clicking the mic button (`#voice-toggle-btn`) starts
-listening only while the avatar is `idle`. A `MutationObserver` on
+listening only while the avatar is `idle` (or `error`, see below). A `MutationObserver` on
 `#avatar-panel`'s `data-state` attribute restarts listening every time the
 avatar returns to `idle` after speaking (the existing `"silent"` SDK event,
 observed indirectly), forming
@@ -201,6 +239,14 @@ button is toggled off. A "no-speech" recognition error just restarts
 listening rather than stopping voice mode; other errors (e.g. mic permission
 denied) stop voice mode and show an inline error bubble, the same visual
 pattern Text Chat already uses for failed `/chat` calls.
+
+**Failure recovery** (Demo Readiness): the page's `readyToListen()` treats
+the avatar's `"error"` state like `"idle"`. Replies still arrive as text and
+the next `speak()` reconnects the avatar, so waiting for `"idle"` alone would
+leave the loop stuck forever after one TTS or avatar failure. When a reply
+cannot be voiced, `speak()` returns `false` and the page adds a single
+"Voice playback is unavailable right now…" note per failure streak (reset by
+the next success) — not one per turn.
 
 **Preventing Sarah's voice from being captured by the mic**: purely a
 scheduling guarantee, not audio processing. The recognizer is only ever
@@ -436,8 +482,10 @@ the one-line normalization on purpose (different roles; `evaluation.py`
 still imports only `MODEL_ID`/`REGION` from `bedrock.py`).
 
 **Empty preserves behavior exactly.** Absent, `null`, `""`, and
-whitespace-only values yield prompts byte-identical to the pre-milestone
-ones. Verified by comparing the old (`6498290`) and new builders across
+whitespace-only values yield prompts byte-identical to the no-material
+prompt (at that milestone, the pre-milestone prompt; the Demo Readiness
+reply-length line was added to both afterwards, and the tests pin the
+no-material prompt exactly). Verified by comparing the old (`6498290`) and new builders across
 every persona × difficulty × scenario × empty-value form (108 combinations,
 prompts and full request bodies), plus tests; the frontend also omits the
 key entirely when the trimmed textarea is empty, so request payloads are
@@ -470,6 +518,89 @@ three personas, counter and cap, New Roleplay, layout, and the
 avatar/audio/feedback regression checks) and reported that it passed and
 everything works as expected. No per-item breakdown was recorded beyond
 that. This is a confirmed working feature, part of the stable baseline.
+
+## Demo Readiness (Mini ECHO v1)
+
+A polish-and-reliability milestone, deliberately **not** a feature: no new
+product capability, integration, or architecture. It followed a short static
+audit of the existing end-to-end flow (open app → roleplay setup → optional
+Reference Material → Start Roleplay → Text Chat / Live Voice → Simli +
+ElevenLabs → Get Feedback → New Roleplay) and fixed only the four issues
+that materially threatened a live demo. No spec or plan document was written
+(intentionally lightweight); this section and the commits are the record.
+
+**What was fixed** (details in the sections named):
+1. **Simli session expiry.** The avatar session was created once at page
+   load, but Simli ends sessions after 180 s idle / 600 s total, and nothing
+   noticed or recovered — replies would silently stop being voiced while the
+   badge still said "Online". Now tracked and reconnected on demand. See
+   "Simli live avatar integration → Session lifetime / recovery".
+2. **Failure states dead-ended.** A TTS failure left the avatar in a sticky
+   "Connection issue", and the Live Voice loop (which re-arms only from
+   `idle`) silently stalled. Now recovers to `idle`, tells the user once,
+   and the loop re-arms from `error` too. See "Live Voice Conversation
+   integration → Failure recovery".
+3. **Reply length.** Nothing told the persona to be brief, so spoken replies
+   could run long (slow, burns the ElevenLabs quota, can hit `max_tokens`
+   mid-sentence). See `SPOKEN_REPLY_INSTRUCTION` under "AWS Bedrock
+   integration".
+4. **Setup-form height.** The setup form (grown by Reference Material) put
+   Start Roleplay 119 px below the fold at 1366×768 and 167 px at 1280×720.
+   Now a two-column `flex-flow: row wrap` form with a 3-row textarea:
+   visible without scrolling at both sizes (measured in headless Chrome:
+   1366×768 → button bottom 587 px of a 681 px viewport). It uses row-wrap
+   rather than CSS grid **on purpose**: the page toggles the form with
+   `style.display = 'flex'` (New Roleplay), which would silently override a
+   grid. See "Current UI structure".
+
+**How it was verified.** Automated: 64 tests passing (one prompt test added,
+one pinned-prompt test updated for the deliberate prompt change). Beyond the
+repo: a throwaway Node harness drove the real `DoctorAvatar` against a fake
+`simli-client` with a virtual clock (10 failure scenarios: TTS failure,
+server-ended session, stale events from a replaced client, both watchdogs,
+connect timeout, service outage/recovery, concurrent connects); a
+headless-Chrome smoke test ran the real page and built bundle against a mock
+backend with Simli and ElevenLabs both down (text chat kept working, voice
+note appeared once, no JS errors); layout was measured/screenshotted in
+headless Chrome before and after. None of that tooling is committed. Manual:
+the user QA'd the running branch in Chrome repeatedly and reported that
+everything works well (no per-item breakdown recorded). This is a confirmed
+working milestone, part of the stable baseline.
+
+**Deliberately deferred optional polish** (found in the audit, *not*
+implemented; do not treat as bugs, and do not start without a fresh decision):
+- The persona name/role caption goes blank after New Roleplay (first load
+  shows "Dr. Sarah Chen / General Practitioner").
+- New Roleplay does not interrupt speech already in progress, and typed
+  sends are not gated on the avatar finishing (replies can queue/overlap;
+  Live Voice is already gated).
+- After a failed `/chat`, the user's bubble stays visible although the
+  message is dropped from history and the input was already cleared.
+- Get Feedback is disabled with no hint why; "Evaluating…" shows on the
+  left-hand button while results appear in the right-hand panel.
+- The mic button has no visible label; on Safari/Firefox it is disabled with
+  only a hover tooltip.
+- A failed `/voices` leaves the voice select empty with no message (it falls
+  back to the default voice silently).
+- Scenario/Objective/Mood start empty every run (they persist across New
+  Roleplay). A preset library remains out of scope (coupled to Admin).
+
+**Presenter notes (operational, not code):** use desktop Chrome and grant
+microphone permission beforehand; the first click/keypress unlocks audio; all
+three personas share one Simli face (known, deferred); a page refresh loses
+the roleplay by design (stateless); check remaining Simli minutes and
+ElevenLabs credits first — rehearsals consume the free tier.
+
+**Known limits.** The 25 s connect timeout and 10 s / +8 s watchdog values are
+judgment calls sized around Simli's 180 s / 600 s limits. That Simli emits
+`stop`/`error` at expiry is taken from the SDK source (the watchdog covers a
+silent death); it was not observed against real Simli expiry in a controlled
+test beyond the user's manual QA. Live Voice speech recognition and real
+WebRTC/audio cannot be driven headlessly, so those remain user-verified. Note
+for future sessions: `CLAUDE.md` says no real browser is available, but
+headless Chrome at `/Applications/Google Chrome.app` **does** work for layout
+measurement, screenshots, and page smoke tests (`--dump-dom`, `--screenshot`,
+`--virtual-time-budget`) — it just cannot exercise WebRTC/audio/STT.
 
 ## ElevenLabs TTS integration (`app/tts.py`)
 
@@ -519,6 +650,12 @@ import time.
 4. Audio is heard through the `#avatar-audio` element, which Simli's LiveKit
    transport attaches the incoming audio track to directly — the frontend never
    builds its own audio graph or a second audio path.
+5. If Simli has ended the session (idle 180 s / max 600 s) or the connection
+   never came up, `ensureConnected()` — called at Start Roleplay and inside
+   every `speak()` — reconnects, in parallel with the TTS fetch. If the
+   reply cannot be voiced at all, the state returns to `idle`/`error` (never
+   stuck) and the chat shows a single text-only note. See "Simli live avatar
+   integration → Session lifetime / recovery".
 
 ## Important fixes made (do not re-break these)
 
@@ -549,6 +686,20 @@ import time.
    needs `iceServers: null` and just works through Simli's own relay. Established
    by reading `simli-client`'s actual TypeScript source, not docs (docs were
    incomplete/ambiguous on this point).
+4. **Simli session expiry and stuck states** (Demo Readiness). Simli ends a
+   session after 180 s idle / 600 s total; the avatar was created once and
+   never recovered, and any TTS/avatar failure could strand the state (and the
+   Live Voice loop) in `error`/`thinking`. Fixed by the `_live` flag,
+   `ensureConnected()`, the connect timeout, the speak watchdog, and
+   `speak()` returning a boolean — do not revert to "connect once at page
+   load", and do not let the state machine wait on a Simli event that may
+   never arrive. See "Simli live avatar integration → Session lifetime /
+   recovery".
+5. **Setup form must stay `display: flex`.** The page shows/hides
+   `#roleplay-setup` with inline `style.display = 'flex'`; an id-level
+   `display: grid` would be silently overridden after New Roleplay. The
+   two-column layout is therefore `flex-flow: row wrap` (half-width fields
+   are `.roleplay-field-half`).
 
 ## Current UI structure (`static/index.html`)
 
@@ -564,7 +715,11 @@ viewport (`100dvh`) dark cinematic layout:
     `stateEl.textContent` the JS sets, which is hidden via `font-size: 0` — plus
     the voice `<select>`, restyled but still a native element)
   - `#chat-panel` — disclaimer banner, `#roleplay-setup` (the "Start a
-    Roleplay" form — see "Roleplay Sessions" below; visible by default),
+    Roleplay" form — see "Roleplay Sessions" below; visible by default; a
+    two-column `flex-flow: row wrap` layout — Persona | Scenario, Objective,
+    Mood | Difficulty, Reference Material, Start — collapsing to one column
+    at ≤560px, sized so Start Roleplay shows without scrolling at 1366×768
+    and 1280×720),
     `#chat` (glass scrollable log, `.message.user|.ai|.error` + `.bubble`
     classes exactly as set by `addMessage()`), `#chat-form` (pill-shaped
     composer with an SVG send icon) — `#chat` and `#chat-form` both start
@@ -630,6 +785,13 @@ viewport (`100dvh`) dark cinematic layout:
   vector store, ingestion, persistence, or Admin. An empty/omitted field
   preserves prior behavior byte-for-byte. Manually verified in Chrome by
   the user (2026-09-18) — see "Therapeutic Area / Product Knowledge" above
+- Demo Readiness: the avatar session recovers automatically when Simli ends
+  it (idle/max-length), TTS or avatar failures can no longer strand the
+  avatar state or the Live Voice loop (text replies continue, with a single
+  "voice unavailable" note), persona replies are kept short for live speech,
+  and the setup form fits without scrolling at 1366×768 / 1280×720.
+  Manually verified in Chrome by the user (repeated runs) — see "Demo
+  Readiness (Mini ECHO v1)" above
 
 ## Known issues / open items
 
@@ -640,11 +802,11 @@ viewport (`100dvh`) dark cinematic layout:
 - Debug logging in `doctor-avatar.js` and the inline script is currently verbose
   (console.log at nearly every step) — added deliberately during avatar/audio
   debugging. Nobody has asked for it to be trimmed yet; leave it unless asked.
-- The full visual redesign has been verified functionally (all endpoints, all
-  hooks, byte-identical scripts) but **not yet visually confirmed in a real
-  browser by the user** as of this writing — no environment here has real browser
-  access, so every UI change in this project has had to be verified by the user
-  directly.
+- The visual redesign and every later UI change have been confirmed in a real
+  browser by the user across the milestones above (including the Demo
+  Readiness QA). Interactive WebRTC/audio/STT behavior can still only be
+  verified by the user directly; layout can additionally be measured and
+  screenshotted with headless Chrome (see "Demo Readiness").
 - Free-tier usage limits exist on both third-party services (Simli: $10 signup
   credit + 50 free minutes/month; ElevenLabs: 10,000 credits/month, roughly 10
   minutes of speech) — extended testing will eventually hit them. Not a bug.
@@ -654,16 +816,19 @@ viewport (`100dvh`) dark cinematic layout:
   per earlier design review, not drift to "fix."
 - Persona-specific Simli faces are modeled (`Persona.face_id`,
   `POST /avatar/session`'s optional `face_id`) but not yet wired end to
-  end: every persona currently shares one verified Simli face, and
-  `avatar.connect()` still fires once at page load before any persona is
-  chosen. Switching faces per persona requires either delaying that call
-  or adding reconnect-on-persona-change logic to `doctor-avatar.js` —
-  neither exists yet, deliberately deferred until multiple real Simli
-  face IDs are provisioned.
+  end: every persona currently shares one verified Simli face, and the
+  page-load `avatar.connect()` still happens before any persona is chosen.
+  The Demo Readiness reconnect machinery makes reconnect-on-persona-change
+  technically easier, but nothing passes a `face_id` through `connect()` or
+  reconnects on persona change — deliberately deferred until multiple real
+  Simli face IDs are provisioned.
 - Live Voice Conversation mode (the mic button and listening state) requires
   desktop Chrome — the browser's native `SpeechRecognition` API is not available
   in Safari or Firefox. On those browsers, the mic button is disabled with an
   explanatory tooltip and Text Chat mode works normally.
+- Seven optional demo-polish items found in the Demo Readiness audit were
+  deliberately not implemented — see the list under "Demo Readiness (Mini
+  ECHO v1)". They are not defects to fix on sight.
 
 ## Tests and how to run them
 
@@ -672,15 +837,18 @@ source venv/bin/activate
 pytest -v
 ```
 
-63 tests (44 before the Reference Material milestone, plus 19 added by it),
-all passing, all network-free (every external call — Bedrock, Simli,
+64 tests (44 before the Reference Material milestone, +19 added by it, +1
+added by Demo Readiness), all passing, all network-free (every external call — Bedrock, Simli,
 ElevenLabs — is mocked at the function boundary in `tests/test_main.py`, or
 avoided entirely via pure-function tests in `tests/test_bedrock.py` and
 `tests/test_evaluation.py`). No tests exist for the JavaScript (`doctor-avatar.js`,
 the inline script, or CSS) — this is a deliberate, long-standing project convention
 (no JS test infra was ever added), not an oversight. Live/manual verification (curl
 for HTTP-level checks, the actual browser for WebRTC/audio/visual behavior) has been
-the substitute throughout.
+the substitute throughout. (Demo Readiness additionally used throwaway,
+uncommitted tooling — a Node harness with a fake `simli-client`, headless-
+Chrome smoke tests and layout measurement — described in that section; it
+follows the same no-JS-test-infra convention.)
 
 ## How to run the app locally
 
@@ -779,6 +947,16 @@ installed; both `esbuild` and `simli-client` are declared in `package.json`.)
   no-material version; (d) the evaluator's figure-quoting allowance applies
   only when material is present and never permits invented numbers or
   numeric scoring. See "Therapeutic Area / Product Knowledge" above.
+- Demo Readiness invariants: (a) `DoctorAvatar` must keep recovering from an
+  ended session (`_live`, `ensureConnected()`, the `current()` client-identity
+  guard) and its states stay the same five — never wait on a Simli event that
+  may not arrive; (b) `speak()` never throws and returns a boolean, and a
+  reconnect must not leave the state at `"idle"` before audio plays (Live
+  Voice would capture the persona's voice); (c) the page's `readyToListen()`
+  must keep treating `"error"` like `"idle"`; (d) `#roleplay-setup` stays
+  `display: flex` (row-wrap), never grid; (e) `SPOKEN_REPLY_INSTRUCTION`
+  stays before the reference block and `persona.safety_framing`. See "Demo
+  Readiness (Mini ECHO v1)" above.
 
 ## Completed and merged milestones (chronological)
 
@@ -833,12 +1011,20 @@ read the relevant spec before touching any of these areas.
    plan: `docs/superpowers/plans/2026-09-18-therapeutic-area-knowledge.md`.
    Implemented in commits `75257f0`–`833e224`. Manually verified
    2026-09-18.
+9. **Demo Readiness (Mini ECHO v1)** — Simli session recovery, voice-loop
+   failure recovery, short spoken replies, and a presentation-safe setup
+   form; polish and reliability only, no new capability. See "Demo
+   Readiness (Mini ECHO v1)" above. No spec/plan (intentionally
+   lightweight). Implemented in commits `7626e79` (reply length) and
+   `c746d76` (avatar recovery, voice loop, layout, rebuilt bundle).
+   Manually verified by the user in Chrome (repeated runs), closed out
+   2026-09-19. **Mini ECHO v1 is Demo Ready.**
 
-**Current `main`**: contains the Reference Material milestone (feature
-commits `75257f0`–`833e224`, its spec and plan, and this documentation
-update), pushed to `origin/main` (private GitHub repo
+**Current `main`**: contains the Demo Readiness milestone (feature commits
+`7626e79` and `c746d76`, plus this documentation update) on top of the
+Reference Material milestone, pushed to `origin/main` (private GitHub repo
 `Abdul-06-om/Mini_Echo_MVP`), local and remote identical, working tree
-clean. **63 tests, all passing** (see "Tests and how to run them" above
+clean. **64 tests, all passing** (see "Tests and how to run them" above
 for the exact command and file breakdown).
 
 ## Source-document review: remaining Tier-1 gaps (as of 2026-09-18)
@@ -970,8 +1156,9 @@ above is kept as the evidence trail for it.
 
 ## Next planned feature
 
-**None currently planned or in progress.** Milestone 8 closed out the
-Tier-1 gap (A). The only remaining Tier-1 gap in the status map is **(B)**,
+**None currently planned or in progress. Mini ECHO v1 is Demo Ready**
+(milestone 9); the core feature set is complete for now. Milestone 8 closed
+out the Tier-1 gap (A). The only remaining Tier-1 gap in the status map is **(B)**,
 the Multi-Modal Practice visual-aid/screen-share sub-feature. It is
 uninvestigated: feasibility against Simli's actual public API is
 unverified, and the source's own example ("AvatarVision") is attributed to
